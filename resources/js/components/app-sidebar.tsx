@@ -15,12 +15,15 @@ import { Link } from '@inertiajs/react';
 import { Landmark, LayoutGrid } from 'lucide-react';
 import AppLogo from './app-logo';
 
-const mainNavItems: NavItem[] = [
+const platformItems: NavItem[] = [
     {
         title: 'Dashboard',
         href: dashboard(),
         icon: LayoutGrid,
     },
+];
+
+const bankingItems: NavItem[] = [
     {
         title: 'AC Tesorería',
         href: tesoreria(),
@@ -44,7 +47,8 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
+                <NavMain items={platformItems} label="Platform" />
+                <NavMain items={bankingItems} label="Opciones de bancos" />
             </SidebarContent>
 
             <SidebarFooter>

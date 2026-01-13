@@ -9,12 +9,17 @@ import { useActiveUrl } from '@/hooks/use-active-url';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
 
-export function NavMain({ items = [] }: { items: NavItem[] }) {
+interface NavMainProps {
+    items: NavItem[];
+    label?: string;
+}
+
+export function NavMain({ items = [], label = 'Platform' }: NavMainProps) {
     const { urlIsActive } = useActiveUrl();
 
     return (
         <SidebarGroup className="px-2 py-0">
-            <SidebarGroupLabel>Platform</SidebarGroupLabel>
+            <SidebarGroupLabel>{label}</SidebarGroupLabel>
             <SidebarMenu>
                 {items.map((item) => (
                     <SidebarMenuItem key={item.title}>

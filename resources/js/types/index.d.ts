@@ -22,11 +22,15 @@ export interface ImportError {
     error: string;
 }
 
+export type BatchStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
 export interface BatchResult {
     uuid: string;
     total_records: number;
     total_debit: string;
     total_credit: string;
+    status: BatchStatus;
+    status_label: string;
     processed_at: string;
 }
 
@@ -40,6 +44,7 @@ export interface Batch {
     total_records: number;
     total_debit: string;
     total_credit: string;
+    status: BatchStatus;
     processed_at: string;
     created_at: string;
     updated_at: string;
@@ -63,6 +68,8 @@ export interface BatchDetail {
     total_records: number;
     total_debit: string;
     total_credit: string;
+    status: BatchStatus;
+    status_label: string;
     processed_at: string;
     branch: Branch;
     bank_account: BankAccount;

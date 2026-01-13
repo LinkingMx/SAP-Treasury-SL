@@ -41,6 +41,8 @@ class BatchController extends Controller
             'total_records' => $batch->total_records,
             'total_debit' => $batch->total_debit,
             'total_credit' => $batch->total_credit,
+            'status' => $batch->status->value,
+            'status_label' => $batch->status->label(),
             'processed_at' => $batch->processed_at?->format('Y-m-d H:i:s'),
             'branch' => $batch->branch,
             'bank_account' => $batch->bankAccount,
@@ -115,6 +117,8 @@ class BatchController extends Controller
                     'total_records' => $batch->total_records,
                     'total_debit' => $batch->total_debit,
                     'total_credit' => $batch->total_credit,
+                    'status' => $batch->status->value,
+                    'status_label' => $batch->status->label(),
                     'processed_at' => $batch->processed_at->format('Y-m-d H:i:s'),
                 ],
             ]);

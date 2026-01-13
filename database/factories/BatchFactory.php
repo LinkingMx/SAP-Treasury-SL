@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\BatchStatus;
 use App\Models\BankAccount;
 use App\Models\Branch;
 use App\Models\User;
@@ -29,6 +30,7 @@ class BatchFactory extends Factory
             'total_records' => fake()->numberBetween(1, 100),
             'total_debit' => fake()->randomFloat(2, 1000, 100000),
             'total_credit' => fake()->randomFloat(2, 1000, 100000),
+            'status' => BatchStatus::Pending,
             'processed_at' => now(),
         ];
     }

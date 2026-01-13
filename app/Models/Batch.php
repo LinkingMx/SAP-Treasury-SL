@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\BatchStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -26,6 +27,7 @@ class Batch extends Model
         'total_records',
         'total_debit',
         'total_credit',
+        'status',
         'processed_at',
     ];
 
@@ -39,6 +41,7 @@ class Batch extends Model
         return [
             'total_debit' => 'decimal:2',
             'total_credit' => 'decimal:2',
+            'status' => BatchStatus::class,
             'processed_at' => 'datetime',
         ];
     }

@@ -2,6 +2,7 @@
 
 namespace App\Imports;
 
+use App\Enums\BatchStatus;
 use App\Models\Batch;
 use App\Models\Transaction;
 use Carbon\Carbon;
@@ -59,6 +60,7 @@ class TransactionsImport implements ToCollection, WithHeadingRow
                 'user_id' => $this->userId,
                 'filename' => $this->filename,
                 'total_records' => $rows->count(),
+                'status' => BatchStatus::Pending,
                 'processed_at' => now(),
             ]);
 

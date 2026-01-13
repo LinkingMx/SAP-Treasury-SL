@@ -10,6 +10,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 import {
     Dialog,
     DialogContent,
@@ -46,6 +47,7 @@ import {
     type Batch,
     type BatchDetail,
     type BatchResult,
+    type BatchStatus,
     type Branch,
     type BreadcrumbItem,
     type ImportError,
@@ -232,6 +234,16 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
             hour: '2-digit',
             minute: '2-digit',
         });
+    };
+
+    const getStatusLabel = (status: BatchStatus): string => {
+        const labels: Record<BatchStatus, string> = {
+            pending: 'Pendiente',
+            processing: 'Procesando',
+            completed: 'Completado',
+            failed: 'Fallido',
+        };
+        return labels[status];
     };
 
     const handleBranchChange = (value: string) => {
@@ -647,6 +659,7 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                             <TableHead>UUID</TableHead>
                                             <TableHead>Archivo</TableHead>
                                             <TableHead>Fecha procesado</TableHead>
+                                            <TableHead>Estado</TableHead>
                                             <TableHead className="text-right">Registros</TableHead>
                                             <TableHead className="text-right">Total Débito</TableHead>
                                             <TableHead className="text-right">Total Crédito</TableHead>
@@ -663,6 +676,13 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                                     {batch.filename}
                                                 </TableCell>
                                                 <TableCell>{formatDate(batch.processed_at)}</TableCell>
+                                                <TableCell>
+                                                    <Badge
+                                                        variant={batch.status === 'failed' ? 'destructive' : 'default'}
+                                                    >
+                                                        {getStatusLabel(batch.status)}
+                                                    </Badge>
+                                                </TableCell>
                                                 <TableCell className="text-right">
                                                     {batch.total_records}
                                                 </TableCell>

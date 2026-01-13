@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import {
     Select,
     SelectContent,
@@ -21,7 +22,7 @@ import {
     type ImportError,
 } from '@/types';
 import { Head } from '@inertiajs/react';
-import { AlertCircle, CheckCircle2, Download, Loader2, Upload } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Download, FileSpreadsheet, Loader2, Upload, X } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -35,11 +36,15 @@ interface Props {
     bankAccounts: BankAccount[];
 }
 
+type UploadStatus = 'idle' | 'validating' | 'processing' | 'success' | 'error';
+
 export default function Tesoreria({ branches, bankAccounts }: Props) {
     const [selectedBranch, setSelectedBranch] = useState<string>('');
     const [selectedBankAccount, setSelectedBankAccount] = useState<string>('');
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
+    const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
+    const [uploadProgress, setUploadProgress] = useState(0);
     const [errors, setErrors] = useState<ImportError[]>([]);
     const [successResult, setSuccessResult] = useState<BatchResult | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -60,7 +65,26 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
             setSelectedFile(file);
             setErrors([]);
             setSuccessResult(null);
+            setUploadStatus('idle');
+            setUploadProgress(0);
         }
+    };
+
+    const handleRemoveFile = () => {
+        setSelectedFile(null);
+        setErrors([]);
+        setSuccessResult(null);
+        setUploadStatus('idle');
+        setUploadProgress(0);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
+
+    const formatFileSize = (bytes: number): string => {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     };
 
     const handleUpload = async () => {
@@ -69,6 +93,8 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
         setIsUploading(true);
         setErrors([]);
         setSuccessResult(null);
+        setUploadStatus('validating');
+        setUploadProgress(20);
 
         const formData = new FormData();
         formData.append('branch_id', selectedBranch);
@@ -76,6 +102,11 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
         formData.append('file', selectedFile);
 
         try {
+            // Simular progreso de validación
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            setUploadProgress(40);
+            setUploadStatus('processing');
+
             const response = await fetch('/tesoreria/batches', {
                 method: 'POST',
                 body: formData,
@@ -87,18 +118,23 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                 },
             });
 
+            setUploadProgress(80);
             const data = await response.json();
+            setUploadProgress(100);
 
             if (response.ok && data.success) {
+                setUploadStatus('success');
                 setSuccessResult(data.batch);
                 setSelectedFile(null);
                 if (fileInputRef.current) {
                     fileInputRef.current.value = '';
                 }
             } else {
+                setUploadStatus('error');
                 setErrors(data.errors || []);
             }
         } catch {
+            setUploadStatus('error');
             setErrors([{ row: 0, error: 'Error de conexión. Intente nuevamente.' }]);
         } finally {
             setIsUploading(false);
@@ -137,6 +173,21 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
     };
 
     const canUpload = selectedBranch && selectedBankAccount && selectedFile && !isUploading;
+
+    const getStatusMessage = (): string => {
+        switch (uploadStatus) {
+            case 'validating':
+                return 'Validando archivo...';
+            case 'processing':
+                return 'Procesando transacciones...';
+            case 'success':
+                return 'Completado';
+            case 'error':
+                return 'Error en el proceso';
+            default:
+                return '';
+        }
+    };
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -190,33 +241,74 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                         </div>
 
                         {/* File Upload Row */}
-                        <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-                            <div className="grid gap-2">
-                                <Label htmlFor="file">Archivo Excel</Label>
-                                <Input
-                                    ref={fileInputRef}
-                                    id="file"
-                                    type="file"
-                                    accept=".xlsx,.xls"
-                                    onChange={handleFileChange}
-                                    disabled={!selectedBankAccount}
-                                />
-                            </div>
-                            <div className="flex items-end">
-                                <Button onClick={handleUpload} disabled={!canUpload}>
-                                    {isUploading ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Procesando...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Upload className="mr-2 h-4 w-4" />
-                                            Cargar Excel
-                                        </>
+                        <div className="space-y-4">
+                            <div className="grid gap-4 md:grid-cols-[1fr_auto]">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="file">Archivo Excel</Label>
+                                    <Input
+                                        ref={fileInputRef}
+                                        id="file"
+                                        type="file"
+                                        accept=".xlsx,.xls"
+                                        onChange={handleFileChange}
+                                        disabled={!selectedBankAccount || isUploading}
+                                        className={selectedFile ? 'hidden' : ''}
+                                    />
+                                    {/* Selected File Badge */}
+                                    {selectedFile && (
+                                        <div className="flex items-center gap-2 rounded-md border bg-muted/50 p-3">
+                                            <FileSpreadsheet className="h-5 w-5 text-green-600" />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium truncate">
+                                                    {selectedFile.name}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {formatFileSize(selectedFile.size)}
+                                                </p>
+                                            </div>
+                                            {!isUploading && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 shrink-0"
+                                                    onClick={handleRemoveFile}
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                    <span className="sr-only">Remover archivo</span>
+                                                </Button>
+                                            )}
+                                        </div>
                                     )}
-                                </Button>
+                                </div>
+                                <div className="flex items-end">
+                                    <Button onClick={handleUpload} disabled={!canUpload}>
+                                        {isUploading ? (
+                                            <>
+                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                Procesando...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Upload className="mr-2 h-4 w-4" />
+                                                Cargar Excel
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
                             </div>
+
+                            {/* Progress Bar */}
+                            {isUploading && (
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="text-muted-foreground">
+                                            {getStatusMessage()}
+                                        </span>
+                                        <span className="font-medium">{uploadProgress}%</span>
+                                    </div>
+                                    <Progress value={uploadProgress} className="h-2" />
+                                </div>
+                            )}
                         </div>
 
                         {/* Success Alert */}

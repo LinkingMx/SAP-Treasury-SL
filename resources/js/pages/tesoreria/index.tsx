@@ -444,19 +444,41 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                             <div className="grid gap-4 md:grid-cols-[1fr_auto]">
                                 <div className="grid gap-2">
                                     <Label htmlFor="file">Archivo Excel</Label>
-                                    <Input
+                                    {/* Hidden native input */}
+                                    <input
                                         ref={fileInputRef}
                                         id="file"
                                         type="file"
                                         accept=".xlsx,.xls"
                                         onChange={handleFileChange}
                                         disabled={!selectedBankAccount || isUploading}
-                                        className={selectedFile ? 'hidden' : ''}
+                                        className="sr-only"
                                     />
-                                    {/* Selected File Badge */}
-                                    {selectedFile && (
-                                        <div className="flex items-center gap-2 rounded-md border bg-muted/50 p-3">
-                                            <FileSpreadsheet className="h-5 w-5 text-green-600" />
+                                    {/* Custom file drop zone */}
+                                    {!selectedFile ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={!selectedBankAccount || isUploading}
+                                            className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/50 px-6 py-8 text-center transition-colors hover:border-muted-foreground/50 hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
+                                        >
+                                            <div className="rounded-full bg-background p-3 shadow-sm">
+                                                <Upload className="h-6 w-6 text-muted-foreground" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-sm font-medium">
+                                                    Haz clic para seleccionar archivo
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Formatos: .xlsx, .xls
+                                                </p>
+                                            </div>
+                                        </button>
+                                    ) : (
+                                        <div className="flex items-center gap-3 rounded-lg border bg-muted/50 p-3">
+                                            <div className="rounded-lg bg-green-500/10 p-2">
+                                                <FileSpreadsheet className="h-5 w-5 text-green-600" />
+                                            </div>
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm font-medium truncate">
                                                     {selectedFile.name}
@@ -468,8 +490,8 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                             {!isUploading && (
                                                 <Button
                                                     variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 shrink-0"
+                                                    size="icon-sm"
+                                                    className="shrink-0 text-muted-foreground hover:text-foreground"
                                                     onClick={handleRemoveFile}
                                                 >
                                                     <X className="h-4 w-4" />
@@ -483,12 +505,12 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                     <Button onClick={handleUpload} disabled={!canUpload}>
                                         {isUploading ? (
                                             <>
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                <Loader2 className="h-4 w-4 animate-spin" />
                                                 Procesando...
                                             </>
                                         ) : (
                                             <>
-                                                <Upload className="mr-2 h-4 w-4" />
+                                                <Upload className="h-4 w-4" />
                                                 Cargar Excel
                                             </>
                                         )}

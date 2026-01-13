@@ -38,6 +38,13 @@ class BranchForm
                             ->numeric()
                             ->minValue(0)
                             ->helperText('Identificador numérico de la sucursal en SAP'),
+
+                        TextInput::make('ceco')
+                            ->label('Centro de Costos (CECO)')
+                            ->prefixIcon('heroicon-o-calculator')
+                            ->placeholder('CC-001')
+                            ->maxLength(255)
+                            ->helperText('Código del centro de costos en SAP'),
                     ])
                     ->columns(1),
             ]);

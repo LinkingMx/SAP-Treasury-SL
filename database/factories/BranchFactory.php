@@ -20,6 +20,7 @@ class BranchFactory extends Factory
             'name' => 'Sucursal '.fake()->city(),
             'sap_database' => 'SBO_'.fake()->regexify('[A-Z]{5,10}'),
             'sap_branch_id' => fake()->numberBetween(1, 100),
+            'ceco' => 'CC-'.fake()->numerify('###'),
         ];
     }
 }

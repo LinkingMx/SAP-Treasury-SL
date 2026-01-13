@@ -28,6 +28,12 @@ class BranchesTable
                     ->label('ID Sucursal SAP')
                     ->sortable(),
 
+                TextColumn::make('ceco')
+                    ->label('CECO')
+                    ->searchable()
+                    ->sortable()
+                    ->placeholder('—'),
+
                 TextColumn::make('created_at')
                     ->label('Creado')
                     ->dateTime('d/m/Y H:i')

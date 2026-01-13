@@ -20,6 +20,7 @@ class Branch extends Model
         'name',
         'sap_database',
         'sap_branch_id',
+        'ceco',
     ];
 
     /**

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BatchController;
 use App\Models\BankAccount;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -25,6 +26,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 ->get(['id', 'branch_id', 'name', 'account']),
         ]);
     })->name('tesoreria');
+
+    Route::post('tesoreria/batches', [BatchController::class, 'store'])->name('batches.store');
+    Route::post('tesoreria/batches/error-log', [BatchController::class, 'downloadErrorLog'])->name('batches.error-log');
 });
 
 require __DIR__.'/settings.php';

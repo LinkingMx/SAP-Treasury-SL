@@ -17,6 +17,19 @@ export interface BankAccount {
     account: string;
 }
 
+export interface ImportError {
+    row: number;
+    error: string;
+}
+
+export interface BatchResult {
+    uuid: string;
+    total_records: number;
+    total_debit: string;
+    total_credit: string;
+    processed_at: string;
+}
+
 export interface BreadcrumbItem {
     title: string;
     href: string;

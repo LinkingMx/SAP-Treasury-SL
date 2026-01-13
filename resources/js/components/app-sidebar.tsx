@@ -1,5 +1,4 @@
 import { NavMain } from '@/components/nav-main';
-import { NavTesoreria } from '@/components/nav-tesoreria';
 import { NavUser } from '@/components/nav-user';
 import {
     Sidebar,
@@ -10,10 +9,10 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard } from '@/routes';
+import { dashboard, tesoreria } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { LayoutGrid, Settings } from 'lucide-react';
+import { Landmark, LayoutGrid, Settings } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -27,6 +26,11 @@ const mainNavItems: NavItem[] = [
         href: '/admin',
         icon: Settings,
         external: true,
+    },
+    {
+        title: 'AC Tesorería',
+        href: tesoreria(),
+        icon: Landmark,
     },
 ];
 
@@ -47,7 +51,6 @@ export function AppSidebar() {
 
             <SidebarContent>
                 <NavMain items={mainNavItems} />
-                <NavTesoreria />
             </SidebarContent>
 
             <SidebarFooter>

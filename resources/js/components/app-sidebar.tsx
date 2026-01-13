@@ -1,4 +1,5 @@
 import { NavMain } from '@/components/nav-main';
+import { NavTesoreria } from '@/components/nav-tesoreria';
 import { NavUser } from '@/components/nav-user';
 import {
     Sidebar,
@@ -46,6 +47,7 @@ export function AppSidebar() {
 
             <SidebarContent>
                 <NavMain items={mainNavItems} />
+                <NavTesoreria />
             </SidebarContent>
 
             <SidebarFooter>

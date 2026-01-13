@@ -17,7 +17,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('tesoreria', function () {
         return Inertia::render('tesoreria/index', [
-            'branches' => auth()->user()->branches()->get(['id', 'name']),
+            'branches' => auth()->user()->branches()->get(['branches.id', 'branches.name']),
         ]);
     })->name('tesoreria');
 });

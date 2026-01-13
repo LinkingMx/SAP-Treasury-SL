@@ -750,7 +750,7 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
 
             {/* Batch Detail Modal */}
             <Dialog open={batchDetailOpen} onOpenChange={setBatchDetailOpen}>
-                <DialogContent className="max-w-5xl max-h-[85vh] overflow-hidden flex flex-col">
+                <DialogContent className="!max-w-[90vw] !w-[1400px] max-h-[85vh] overflow-hidden flex flex-col">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-3">
                             <FileSpreadsheet className="h-5 w-5" />
@@ -840,44 +840,44 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                 <h4 className="font-medium mb-3 text-sm uppercase tracking-wide text-muted-foreground">
                                     Transacciones ({batchDetail.transactions.length})
                                 </h4>
-                                <div className="border rounded-lg">
-                                    <div className="max-h-[280px] overflow-auto">
-                                        <Table>
-                                            <TableHeader className="sticky top-0 bg-muted/80 backdrop-blur-sm">
-                                                <TableRow>
-                                                    <TableHead className="w-10 text-center">#</TableHead>
-                                                    <TableHead className="w-24">Fecha</TableHead>
-                                                    <TableHead>Memo</TableHead>
-                                                    <TableHead className="w-28">Cuenta</TableHead>
-                                                    <TableHead className="w-28 text-right">Débito</TableHead>
-                                                    <TableHead className="w-28 text-right">Crédito</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
+                                <div className="border rounded-lg overflow-hidden">
+                                    <div className="max-h-[280px] overflow-y-auto overflow-x-auto">
+                                        <table className="w-full min-w-[700px] text-sm">
+                                            <thead className="sticky top-0 bg-muted/95 backdrop-blur-sm border-b">
+                                                <tr>
+                                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground w-12">#</th>
+                                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground w-24">Fecha</th>
+                                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Memo</th>
+                                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground w-32">Cuenta</th>
+                                                    <th className="px-3 py-2 text-right font-medium text-muted-foreground w-28">Débito</th>
+                                                    <th className="px-3 py-2 text-right font-medium text-muted-foreground w-28">Crédito</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-border">
                                                 {batchDetail.transactions.length === 0 ? (
-                                                    <TableRow>
-                                                        <TableCell
+                                                    <tr>
+                                                        <td
                                                             colSpan={6}
                                                             className="text-center text-muted-foreground py-8"
                                                         >
                                                             No hay transacciones en este lote
-                                                        </TableCell>
-                                                    </TableRow>
+                                                        </td>
+                                                    </tr>
                                                 ) : (
                                                     batchDetail.transactions.map((transaction) => (
-                                                        <TableRow key={transaction.id} className="text-sm">
-                                                            <TableCell className="font-mono text-xs text-muted-foreground text-center">
+                                                        <tr key={transaction.id} className="hover:bg-muted/50">
+                                                            <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
                                                                 {transaction.sequence}
-                                                            </TableCell>
-                                                            <TableCell className="text-xs whitespace-nowrap">
+                                                            </td>
+                                                            <td className="px-3 py-2 text-xs whitespace-nowrap">
                                                                 {new Date(transaction.due_date).toLocaleDateString(
                                                                     'es-MX'
                                                                 )}
-                                                            </TableCell>
-                                                            <TableCell>
+                                                            </td>
+                                                            <td className="px-3 py-2">
                                                                 <Tooltip>
                                                                     <TooltipTrigger asChild>
-                                                                        <span className="block truncate max-w-[180px] cursor-default text-sm">
+                                                                        <span className="block truncate max-w-[220px] cursor-default">
                                                                             {transaction.memo}
                                                                         </span>
                                                                     </TooltipTrigger>
@@ -885,33 +885,33 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                                                         {transaction.memo}
                                                                     </TooltipContent>
                                                                 </Tooltip>
-                                                            </TableCell>
-                                                            <TableCell className="font-mono text-xs whitespace-nowrap">
+                                                            </td>
+                                                            <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">
                                                                 {transaction.counterpart_account}
-                                                            </TableCell>
-                                                            <TableCell className="text-right tabular-nums">
+                                                            </td>
+                                                            <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
                                                                 {Number(transaction.debit_amount) > 0 ? (
                                                                     <span className="text-red-500 font-medium">
                                                                         ${formatCurrency(transaction.debit_amount)}
                                                                     </span>
                                                                 ) : (
-                                                                    <span className="text-muted-foreground/50">-</span>
+                                                                    <span className="text-muted-foreground/40">-</span>
                                                                 )}
-                                                            </TableCell>
-                                                            <TableCell className="text-right tabular-nums">
+                                                            </td>
+                                                            <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
                                                                 {Number(transaction.credit_amount) > 0 ? (
                                                                     <span className="text-green-500 font-medium">
                                                                         ${formatCurrency(transaction.credit_amount)}
                                                                     </span>
                                                                 ) : (
-                                                                    <span className="text-muted-foreground/50">-</span>
+                                                                    <span className="text-muted-foreground/40">-</span>
                                                                 )}
-                                                            </TableCell>
-                                                        </TableRow>
+                                                            </td>
+                                                        </tr>
                                                     ))
                                                 )}
-                                            </TableBody>
-                                        </Table>
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             </div>

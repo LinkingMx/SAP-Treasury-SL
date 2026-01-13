@@ -10,6 +10,13 @@ export interface Branch {
     name: string;
 }
 
+export interface BankAccount {
+    id: number;
+    branch_id: number;
+    name: string;
+    account: string;
+}
+
 export interface BreadcrumbItem {
     title: string;
     href: string;

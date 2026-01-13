@@ -37,6 +37,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { tesoreria } from '@/routes';
 import {
@@ -55,6 +56,7 @@ import {
     CheckCircle2,
     ChevronLeft,
     ChevronRight,
+    Copy,
     Download,
     Eye,
     FileSpreadsheet,
@@ -748,11 +750,14 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
 
             {/* Batch Detail Modal */}
             <Dialog open={batchDetailOpen} onOpenChange={setBatchDetailOpen}>
-                <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+                <DialogContent className="max-w-5xl max-h-[85vh] overflow-hidden flex flex-col">
                     <DialogHeader>
-                        <DialogTitle>Detalle del Lote</DialogTitle>
+                        <DialogTitle className="flex items-center gap-3">
+                            <FileSpreadsheet className="h-5 w-5" />
+                            Detalle del Lote
+                        </DialogTitle>
                         <DialogDescription>
-                            Información completa del lote y sus transacciones
+                            {batchDetail?.filename || 'Cargando...'}
                         </DialogDescription>
                     </DialogHeader>
 
@@ -762,117 +767,158 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                         </div>
                     ) : batchDetail ? (
                         <div className="flex-1 overflow-y-auto space-y-6">
-                            {/* Batch Info */}
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                                <div>
-                                    <p className="text-muted-foreground">UUID</p>
-                                    <p className="font-mono font-medium">{batchDetail.uuid}</p>
+                            {/* Batch Info - Reorganized */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                {/* UUID with copy */}
+                                <div className="space-y-1">
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">UUID</p>
+                                    <div className="flex items-center gap-2">
+                                        <code className="text-sm bg-muted px-2 py-1 rounded">
+                                            {batchDetail.uuid.substring(0, 8)}
+                                        </code>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-7 w-7"
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(batchDetail.uuid);
+                                                    }}
+                                                >
+                                                    <Copy className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Copiar UUID completo</TooltipContent>
+                                        </Tooltip>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-muted-foreground">Archivo</p>
-                                    <p className="font-medium truncate" title={batchDetail.filename}>
-                                        {batchDetail.filename}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-muted-foreground">Fecha procesado</p>
+
+                                {/* Fecha */}
+                                <div className="space-y-1">
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Procesado</p>
                                     <p className="font-medium">
                                         {batchDetail.processed_at ? formatDate(batchDetail.processed_at) : '-'}
                                     </p>
                                 </div>
-                                <div>
-                                    <p className="text-muted-foreground">Sucursal</p>
+
+                                {/* Sucursal */}
+                                <div className="space-y-1">
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Sucursal</p>
                                     <p className="font-medium">{batchDetail.branch?.name || '-'}</p>
                                 </div>
-                                <div>
-                                    <p className="text-muted-foreground">Cuenta bancaria</p>
+
+                                {/* Cuenta */}
+                                <div className="space-y-1">
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Cuenta</p>
                                     <p className="font-medium">{batchDetail.bank_account?.name || '-'}</p>
                                 </div>
-                                <div>
-                                    <p className="text-muted-foreground">Creado por</p>
-                                    <p className="font-medium">{batchDetail.user || '-'}</p>
+                            </div>
+
+                            {/* Summary Cards */}
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="bg-muted/50 rounded-lg p-4 text-center">
+                                    <p className="text-2xl font-bold">{batchDetail.total_records}</p>
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Registros</p>
                                 </div>
-                                <div>
-                                    <p className="text-muted-foreground">Total registros</p>
-                                    <p className="font-medium">{batchDetail.total_records}</p>
-                                </div>
-                                <div>
-                                    <p className="text-muted-foreground">Total débito</p>
-                                    <p className="font-medium text-red-600">
+                                <div className="bg-red-500/10 rounded-lg p-4 text-center">
+                                    <p className="text-2xl font-bold text-red-500">
                                         ${formatCurrency(batchDetail.total_debit)}
                                     </p>
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Débito</p>
                                 </div>
-                                <div>
-                                    <p className="text-muted-foreground">Total crédito</p>
-                                    <p className="font-medium text-green-600">
+                                <div className="bg-green-500/10 rounded-lg p-4 text-center">
+                                    <p className="text-2xl font-bold text-green-500">
                                         ${formatCurrency(batchDetail.total_credit)}
                                     </p>
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Crédito</p>
                                 </div>
                             </div>
 
                             {/* Transactions Table */}
                             <div>
-                                <h4 className="font-medium mb-3">
+                                <h4 className="font-medium mb-3 text-sm uppercase tracking-wide text-muted-foreground">
                                     Transacciones ({batchDetail.transactions.length})
                                 </h4>
                                 <div className="border rounded-lg overflow-hidden">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead className="w-16">#</TableHead>
-                                                <TableHead>Fecha</TableHead>
-                                                <TableHead>Memo</TableHead>
-                                                <TableHead>Contrapartida</TableHead>
-                                                <TableHead className="text-right">Débito</TableHead>
-                                                <TableHead className="text-right">Crédito</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {batchDetail.transactions.length === 0 ? (
+                                    <div className="max-h-[300px] overflow-auto">
+                                        <Table>
+                                            <TableHeader className="sticky top-0 bg-background">
                                                 <TableRow>
-                                                    <TableCell
-                                                        colSpan={6}
-                                                        className="text-center text-muted-foreground py-8"
-                                                    >
-                                                        No hay transacciones en este lote
-                                                    </TableCell>
+                                                    <TableHead className="w-12">#</TableHead>
+                                                    <TableHead className="w-28">Fecha</TableHead>
+                                                    <TableHead className="min-w-[200px]">Memo</TableHead>
+                                                    <TableHead className="w-32">Contrapartida</TableHead>
+                                                    <TableHead className="w-32 text-right">Débito</TableHead>
+                                                    <TableHead className="w-32 text-right">Crédito</TableHead>
                                                 </TableRow>
-                                            ) : (
-                                                batchDetail.transactions.map((transaction) => (
-                                                    <TableRow key={transaction.id}>
-                                                        <TableCell className="font-mono text-xs">
-                                                            {transaction.sequence}
-                                                        </TableCell>
-                                                        <TableCell>
-                                                            {new Date(transaction.due_date).toLocaleDateString(
-                                                                'es-MX'
-                                                            )}
-                                                        </TableCell>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {batchDetail.transactions.length === 0 ? (
+                                                    <TableRow>
                                                         <TableCell
-                                                            className="max-w-[200px] truncate"
-                                                            title={transaction.memo}
+                                                            colSpan={6}
+                                                            className="text-center text-muted-foreground py-8"
                                                         >
-                                                            {transaction.memo}
-                                                        </TableCell>
-                                                        <TableCell className="font-mono text-xs">
-                                                            {transaction.counterpart_account}
-                                                        </TableCell>
-                                                        <TableCell className="text-right">
-                                                            {Number(transaction.debit_amount) > 0
-                                                                ? `$${formatCurrency(transaction.debit_amount)}`
-                                                                : '-'}
-                                                        </TableCell>
-                                                        <TableCell className="text-right">
-                                                            {Number(transaction.credit_amount) > 0
-                                                                ? `$${formatCurrency(transaction.credit_amount)}`
-                                                                : '-'}
+                                                            No hay transacciones en este lote
                                                         </TableCell>
                                                     </TableRow>
-                                                ))
-                                            )}
-                                        </TableBody>
-                                    </Table>
+                                                ) : (
+                                                    batchDetail.transactions.map((transaction) => (
+                                                        <TableRow key={transaction.id}>
+                                                            <TableCell className="font-mono text-xs text-muted-foreground">
+                                                                {transaction.sequence}
+                                                            </TableCell>
+                                                            <TableCell className="text-sm">
+                                                                {new Date(transaction.due_date).toLocaleDateString(
+                                                                    'es-MX'
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <span className="block max-w-[250px] truncate cursor-default">
+                                                                            {transaction.memo}
+                                                                        </span>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent side="top" className="max-w-sm">
+                                                                        {transaction.memo}
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            </TableCell>
+                                                            <TableCell className="font-mono text-xs">
+                                                                {transaction.counterpart_account}
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-medium">
+                                                                {Number(transaction.debit_amount) > 0 ? (
+                                                                    <span className="text-red-500">
+                                                                        ${formatCurrency(transaction.debit_amount)}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-muted-foreground">-</span>
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell className="text-right font-medium">
+                                                                {Number(transaction.credit_amount) > 0 ? (
+                                                                    <span className="text-green-500">
+                                                                        ${formatCurrency(transaction.credit_amount)}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-muted-foreground">-</span>
+                                                                )}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))
+                                                )}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
                                 </div>
+                            </div>
+
+                            {/* Footer info */}
+                            <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+                                <span>Creado por: {batchDetail.user || 'Sistema'}</span>
                             </div>
                         </div>
                     ) : null}

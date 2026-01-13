@@ -1,7 +1,16 @@
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
 import { tesoreria } from '@/routes';
-import { type BreadcrumbItem } from '@/types';
+import { type Branch, type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -11,7 +20,13 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-export default function Tesoreria() {
+interface Props {
+    branches: Branch[];
+}
+
+export default function Tesoreria({ branches }: Props) {
+    const [selectedBranch, setSelectedBranch] = useState<string>('');
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="AC Tesorería" />
@@ -24,6 +39,23 @@ export default function Tesoreria() {
                             bancarios desde Extractos bancarios
                         </CardDescription>
                     </CardHeader>
+                    <CardContent>
+                        <div className="grid gap-2">
+                            <Label htmlFor="branch">Sucursal</Label>
+                            <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+                                <SelectTrigger id="branch" className="w-full md:w-[300px]">
+                                    <SelectValue placeholder="Selecciona una sucursal" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {branches.map((branch) => (
+                                        <SelectItem key={branch.id} value={String(branch.id)}>
+                                            {branch.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </CardContent>
                 </Card>
             </div>
         </AppLayout>

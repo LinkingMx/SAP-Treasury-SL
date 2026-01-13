@@ -5,6 +5,11 @@ export interface Auth {
     user: User;
 }
 
+export interface Branch {
+    id: number;
+    name: string;
+}
+
 export interface BreadcrumbItem {
     title: string;
     href: string;

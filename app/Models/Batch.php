@@ -28,6 +28,7 @@ class Batch extends Model
         'total_debit',
         'total_credit',
         'status',
+        'error_message',
         'processed_at',
     ];
 

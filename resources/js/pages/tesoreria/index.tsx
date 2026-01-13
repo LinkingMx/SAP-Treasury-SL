@@ -939,6 +939,17 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                 </div>
                             </div>
 
+                            {/* Batch Error Message */}
+                            {batchDetail.status === 'failed' && batchDetail.error_message && (
+                                <Alert variant="destructive" className="py-3">
+                                    <AlertCircle className="h-4 w-4" />
+                                    <AlertTitle className="text-sm">Error en el procesamiento</AlertTitle>
+                                    <AlertDescription className="text-sm">
+                                        {batchDetail.error_message}
+                                    </AlertDescription>
+                                </Alert>
+                            )}
+
                             {/* Summary Cards */}
                             <div className="grid grid-cols-3 gap-3">
                                 <div className="bg-muted/50 rounded-lg p-3 text-center">

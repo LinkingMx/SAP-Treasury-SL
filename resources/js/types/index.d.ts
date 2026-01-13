@@ -72,6 +72,7 @@ export interface BatchDetail {
     total_credit: string;
     status: BatchStatus;
     status_label: string;
+    error_message: string | null;
     processed_at: string;
     branch: Branch;
     bank_account: BankAccount;

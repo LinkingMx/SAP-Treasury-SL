@@ -45,6 +45,7 @@ class BatchController extends Controller
             'total_credit' => $batch->total_credit,
             'status' => $batch->status->value,
             'status_label' => $batch->status->label(),
+            'error_message' => $batch->error_message,
             'processed_at' => $batch->processed_at?->format('Y-m-d H:i:s'),
             'branch' => $batch->branch,
             'bank_account' => $batch->bankAccount,
@@ -204,8 +205,11 @@ class BatchController extends Controller
             ], 422);
         }
 
-        // Update status to processing
-        $batch->update(['status' => BatchStatus::Processing]);
+        // Update status to processing and clear any previous error
+        $batch->update([
+            'status' => BatchStatus::Processing,
+            'error_message' => null,
+        ]);
 
         // Dispatch job to queue
         ProcessBatchToSapJob::dispatch($batch);

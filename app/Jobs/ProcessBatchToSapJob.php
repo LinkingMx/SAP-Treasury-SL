@@ -45,7 +45,10 @@ class ProcessBatchToSapJob implements ShouldQueue
 
         if (! $branch || ! $bankAccount) {
             Log::error('Batch missing branch or bank account', ['batch_id' => $this->batch->id]);
-            $this->batch->update(['status' => BatchStatus::Failed]);
+            $this->batch->update([
+                'status' => BatchStatus::Failed,
+                'error_message' => 'El lote no tiene sucursal o cuenta bancaria asociada',
+            ]);
 
             return;
         }
@@ -55,7 +58,10 @@ class ProcessBatchToSapJob implements ShouldQueue
             $loggedIn = $sap->login($branch->sap_database);
             if (! $loggedIn) {
                 Log::error('SAP Login failed for batch', ['batch_id' => $this->batch->id]);
-                $this->batch->update(['status' => BatchStatus::Failed]);
+                $this->batch->update([
+                    'status' => BatchStatus::Failed,
+                    'error_message' => 'No se pudo iniciar sesión en SAP Service Layer',
+                ]);
 
                 return;
             }
@@ -64,7 +70,10 @@ class ProcessBatchToSapJob implements ShouldQueue
                 'batch_id' => $this->batch->id,
                 'error' => $e->getMessage(),
             ]);
-            $this->batch->update(['status' => BatchStatus::Failed]);
+            $this->batch->update([
+                'status' => BatchStatus::Failed,
+                'error_message' => 'Error de conexión a SAP: '.$e->getMessage(),
+            ]);
 
             return;
         }
@@ -113,6 +122,7 @@ class ProcessBatchToSapJob implements ShouldQueue
         // Update batch status
         $this->batch->update([
             'status' => $hasErrors ? BatchStatus::Failed : BatchStatus::Completed,
+            'error_message' => $hasErrors ? 'Algunas transacciones no pudieron ser procesadas' : null,
         ]);
 
         Log::info('Batch SAP processing completed', [
@@ -131,6 +141,9 @@ class ProcessBatchToSapJob implements ShouldQueue
             'error' => $exception?->getMessage(),
         ]);
 
-        $this->batch->update(['status' => BatchStatus::Failed]);
+        $this->batch->update([
+            'status' => BatchStatus::Failed,
+            'error_message' => 'Error en el proceso: '.($exception?->getMessage() ?? 'Error desconocido'),
+        ]);
     }
 }

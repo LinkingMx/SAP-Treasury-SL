@@ -30,6 +30,31 @@ export interface BatchResult {
     processed_at: string;
 }
 
+export interface Batch {
+    id: number;
+    uuid: string;
+    branch_id: number;
+    bank_account_id: number;
+    user_id: number;
+    filename: string;
+    total_records: number;
+    total_debit: string;
+    total_credit: string;
+    processed_at: string;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface PaginatedResponse<T> {
+    data: T[];
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+    from: number | null;
+    to: number | null;
+}
+
 export interface BreadcrumbItem {
     title: string;
     href: string;

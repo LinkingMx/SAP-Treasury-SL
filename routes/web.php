@@ -27,7 +27,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ]);
     })->name('tesoreria');
 
+    Route::get('tesoreria/batches', [BatchController::class, 'index'])->name('batches.index');
     Route::post('tesoreria/batches', [BatchController::class, 'store'])->name('batches.store');
+    Route::delete('tesoreria/batches/{batch}', [BatchController::class, 'destroy'])->name('batches.destroy');
     Route::post('tesoreria/batches/error-log', [BatchController::class, 'downloadErrorLog'])->name('batches.error-log');
 });
 

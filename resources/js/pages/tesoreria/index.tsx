@@ -1,5 +1,15 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,17 +22,39 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
 import AppLayout from '@/layouts/app-layout';
 import { tesoreria } from '@/routes';
 import {
     type BankAccount,
+    type Batch,
     type BatchResult,
     type Branch,
     type BreadcrumbItem,
     type ImportError,
+    type PaginatedResponse,
 } from '@/types';
 import { Head } from '@inertiajs/react';
-import { AlertCircle, CheckCircle2, Download, FileSpreadsheet, Loader2, Upload, X } from 'lucide-react';
+import {
+    AlertCircle,
+    CheckCircle2,
+    ChevronLeft,
+    ChevronRight,
+    Download,
+    Eye,
+    FileSpreadsheet,
+    Loader2,
+    Trash2,
+    Upload,
+    X,
+} from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -49,10 +81,118 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
     const [successResult, setSuccessResult] = useState<BatchResult | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // Batches state
+    const [batches, setBatches] = useState<Batch[]>([]);
+    const [batchesLoading, setBatchesLoading] = useState(false);
+    const [batchesPagination, setBatchesPagination] = useState<{
+        currentPage: number;
+        lastPage: number;
+        total: number;
+    }>({ currentPage: 1, lastPage: 1, total: 0 });
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [batchToDelete, setBatchToDelete] = useState<Batch | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
     const filteredBankAccounts = useMemo(() => {
         if (!selectedBranch) return [];
         return bankAccounts.filter((account) => account.branch_id === Number(selectedBranch));
     }, [selectedBranch, bankAccounts]);
+
+    const fetchBatches = useCallback(
+        async (page = 1) => {
+            if (!selectedBranch || !selectedBankAccount) {
+                setBatches([]);
+                setBatchesPagination({ currentPage: 1, lastPage: 1, total: 0 });
+                return;
+            }
+
+            setBatchesLoading(true);
+            try {
+                const params = new URLSearchParams({
+                    branch_id: selectedBranch,
+                    bank_account_id: selectedBankAccount,
+                    page: String(page),
+                });
+
+                const response = await fetch(`/tesoreria/batches?${params}`, {
+                    headers: {
+                        Accept: 'application/json',
+                        'X-CSRF-TOKEN':
+                            document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
+                                ?.content || '',
+                    },
+                });
+
+                if (!response.ok) {
+                    throw new Error('Error al cargar los lotes');
+                }
+
+                const data: PaginatedResponse<Batch> = await response.json();
+                setBatches(data.data);
+                setBatchesPagination({
+                    currentPage: data.current_page,
+                    lastPage: data.last_page,
+                    total: data.total,
+                });
+            } catch (error) {
+                console.error('Error fetching batches:', error);
+                setBatches([]);
+            } finally {
+                setBatchesLoading(false);
+            }
+        },
+        [selectedBranch, selectedBankAccount]
+    );
+
+    useEffect(() => {
+        fetchBatches(1);
+    }, [fetchBatches]);
+
+    const handleDeleteBatch = async () => {
+        if (!batchToDelete) return;
+
+        setIsDeleting(true);
+        try {
+            const response = await fetch(`/tesoreria/batches/${batchToDelete.id}`, {
+                method: 'DELETE',
+                headers: {
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN':
+                        document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ||
+                        '',
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error('Error al eliminar el lote');
+            }
+
+            await fetchBatches(batchesPagination.currentPage);
+            setDeleteDialogOpen(false);
+            setBatchToDelete(null);
+        } catch (error) {
+            console.error('Error deleting batch:', error);
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    const formatCurrency = (value: string): string => {
+        return Number(value).toLocaleString('es-MX', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+    };
+
+    const formatDate = (dateString: string): string => {
+        return new Date(dateString).toLocaleString('es-MX', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    };
 
     const handleBranchChange = (value: string) => {
         setSelectedBranch(value);
@@ -138,6 +278,8 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                 if (fileInputRef.current) {
                     fileInputRef.current.value = '';
                 }
+                // Refresh batches list after successful upload
+                fetchBatches(1);
             } else {
                 setUploadStatus('error');
                 // Handle both validation errors and general errors
@@ -404,7 +546,167 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                         )}
                     </CardContent>
                 </Card>
+
+                {/* Batches Section */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Lotes de Transacción</CardTitle>
+                        <CardDescription>
+                            Historial de lotes procesados para la sucursal y cuenta seleccionadas
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {!selectedBranch || !selectedBankAccount ? (
+                            <div className="flex items-center justify-center py-8 text-muted-foreground">
+                                <p>Selecciona sucursal y cuenta para ver lotes</p>
+                            </div>
+                        ) : batchesLoading ? (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : batches.length === 0 ? (
+                            <div className="flex items-center justify-center py-8 text-muted-foreground">
+                                <p>No hay lotes procesados para esta selección</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>UUID</TableHead>
+                                            <TableHead>Archivo</TableHead>
+                                            <TableHead>Fecha procesado</TableHead>
+                                            <TableHead className="text-right">Registros</TableHead>
+                                            <TableHead className="text-right">Total Débito</TableHead>
+                                            <TableHead className="text-right">Total Crédito</TableHead>
+                                            <TableHead className="text-right">Acciones</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {batches.map((batch) => (
+                                            <TableRow key={batch.id}>
+                                                <TableCell className="font-mono text-xs">
+                                                    {batch.uuid.substring(0, 8)}...
+                                                </TableCell>
+                                                <TableCell className="max-w-[200px] truncate">
+                                                    {batch.filename}
+                                                </TableCell>
+                                                <TableCell>{formatDate(batch.processed_at)}</TableCell>
+                                                <TableCell className="text-right">
+                                                    {batch.total_records}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    ${formatCurrency(batch.total_debit)}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    ${formatCurrency(batch.total_credit)}
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <div className="flex justify-end gap-2">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8"
+                                                            title="Ver detalle"
+                                                        >
+                                                            <Eye className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-8 w-8 text-destructive hover:text-destructive"
+                                                            title="Eliminar lote"
+                                                            onClick={() => {
+                                                                setBatchToDelete(batch);
+                                                                setDeleteDialogOpen(true);
+                                                            }}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+
+                                {/* Pagination */}
+                                {batchesPagination.lastPage > 1 && (
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-sm text-muted-foreground">
+                                            Mostrando {batches.length} de {batchesPagination.total} lotes
+                                        </p>
+                                        <div className="flex items-center gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() =>
+                                                    fetchBatches(batchesPagination.currentPage - 1)
+                                                }
+                                                disabled={batchesPagination.currentPage === 1}
+                                            >
+                                                <ChevronLeft className="h-4 w-4" />
+                                                Anterior
+                                            </Button>
+                                            <span className="text-sm">
+                                                Página {batchesPagination.currentPage} de{' '}
+                                                {batchesPagination.lastPage}
+                                            </span>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() =>
+                                                    fetchBatches(batchesPagination.currentPage + 1)
+                                                }
+                                                disabled={
+                                                    batchesPagination.currentPage ===
+                                                    batchesPagination.lastPage
+                                                }
+                                            >
+                                                Siguiente
+                                                <ChevronRight className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
             </div>
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>¿Eliminar este lote?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Esta acción eliminará permanentemente el lote{' '}
+                            <span className="font-mono font-medium">
+                                {batchToDelete?.uuid.substring(0, 8)}...
+                            </span>{' '}
+                            y todas sus transacciones asociadas. Esta acción no se puede deshacer.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDeleteBatch}
+                            disabled={isDeleting}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {isDeleting ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Eliminando...
+                                </>
+                            ) : (
+                                'Eliminar'
+                            )}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </AppLayout>
     );
 }

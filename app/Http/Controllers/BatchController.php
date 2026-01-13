@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Imports\TransactionsImport;
+use App\Models\Batch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -12,6 +13,32 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BatchController extends Controller
 {
+    public function index(Request $request): JsonResponse
+    {
+        $request->validate([
+            'branch_id' => ['required', 'exists:branches,id'],
+            'bank_account_id' => ['required', 'exists:bank_accounts,id'],
+        ]);
+
+        $batches = Batch::query()
+            ->where('branch_id', $request->input('branch_id'))
+            ->where('bank_account_id', $request->input('bank_account_id'))
+            ->orderBy('processed_at', 'desc')
+            ->paginate(10);
+
+        return response()->json($batches);
+    }
+
+    public function destroy(Batch $batch): JsonResponse
+    {
+        $batch->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Lote eliminado exitosamente',
+        ]);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $request->validate([

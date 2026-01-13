@@ -3,31 +3,63 @@ description: Flujo de trabajo multi-agente en 4 fases para desarrollo de softwar
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob, Task, TodoWrite, AskUserQuestion
 ---
 
-# Multi-Agent Workflow - Orquestador Principal
+# 🔵🟢🟠🟣 Multi-Agent Workflow - Orquestador Principal
 
 Este comando ejecuta un flujo de trabajo estructurado en 4 fases con agentes especializados para desarrollo de software de alta calidad.
 
 ## Agentes Disponibles
 
-Los agentes estan definidos en `.claude/agents/`:
-- `planificador.md` - Fase 1: Analisis y planificacion
-- `implementador.md` - Fase 2: Desarrollo con documentacion
-- `tester.md` - Fase 3: Testing y validacion
-- `documentador.md` - Fase 4: Documentacion y commits
+| Fase | Agente | Color | Archivo |
+|------|--------|-------|---------|
+| 1 | Planificador | 🔵 Azul | `.claude/agents/planificador.md` |
+| 2 | Implementador | 🟢 Verde | `.claude/agents/implementador.md` |
+| 3 | Tester | 🟠 Naranja | `.claude/agents/tester.md` |
+| 4 | Documentador | 🟣 Purpura | `.claude/agents/documentador.md` |
 
-## Fases del Workflow
+## Diagrama de Flujo
 
-1. **Fase 1 - Planificacion**: Analisis y creacion del plan (ver agents/planificador.md)
-2. **Fase 2 - Implementacion**: Desarrollo del codigo (ver agents/implementador.md)
-3. **Fase 3 - Testing**: Pruebas y validacion (ver agents/tester.md)
-4. **Fase 4 - Documentacion**: Documentacion y commit (ver agents/documentador.md)
+```
+┌─────────────────┐
+│  🔵 PLANIFICADOR │ ← Fase 1: Analisis y Plan
+└────────┬────────┘
+         │ ✅ Plan Autorizado
+         ▼
+┌─────────────────┐
+│ 🟢 IMPLEMENTADOR │ ← Fase 2: Desarrollo
+└────────┬────────┘
+         │ ✅ Codigo Completo
+         ▼
+┌─────────────────┐
+│   🟠 TESTER     │ ← Fase 3: Testing
+└────────┬────────┘
+         │ ✅ Testing Aprobado (o ❌ → volver a 🟢)
+         ▼
+┌─────────────────┐
+│ 🟣 DOCUMENTADOR │ ← Fase 4: Docs y Commit
+└─────────────────┘
+         │
+         ▼
+   ✅ COMPLETADO
+```
 
 ## Instrucciones de Ejecucion
 
-### FASE 1: PLANIFICACION
+### INICIO DEL WORKFLOW
 
-Antes de cualquier codigo:
+Al ejecutar `/workflow`, el orquestador debe:
 
+1. Leer el archivo del agente correspondiente a la fase actual
+2. Adoptar la identidad visual del agente (prefijo de color)
+3. Seguir las instrucciones del agente
+4. Transicionar al siguiente agente cuando corresponda
+
+---
+
+## 🔵 FASE 1: PLANIFICACION
+
+**Leer instrucciones de**: `.claude/agents/planificador.md`
+
+El agente Planificador debe:
 1. **Analizar el requerimiento** del usuario cuidadosamente
 2. **Hacer TODAS las preguntas necesarias** para clarificar:
    - Objetivos especificos
@@ -43,20 +75,30 @@ Antes de cualquier codigo:
    - Estimacion de complejidad (Baja/Media/Alta)
 4. **ESPERAR AUTORIZACION** - NO generar codigo sin aprobacion explicita
 
-### FASE 2: IMPLEMENTACION
+**Transicion**: Una vez autorizado → 🟢 IMPLEMENTADOR
 
-Solo despues de autorizacion:
+---
 
+## 🟢 FASE 2: IMPLEMENTACION
+
+**Leer instrucciones de**: `.claude/agents/implementador.md`
+
+El agente Implementador debe:
 1. **Consultar documentacion** usando search-docs de Laravel Boost
 2. **Implementar cambio por cambio** segun el plan
 3. **Seguir convenciones** del codigo existente
 4. **DETENERSE y preguntar** si hay ambiguedad
 5. **Validar** que todos los cambios del plan fueron implementados
 
-### FASE 3: TESTING
+**Transicion**: Una vez completado → 🟠 TESTER
 
-Probar exhaustivamente:
+---
 
+## 🟠 FASE 3: TESTING
+
+**Leer instrucciones de**: `.claude/agents/tester.md`
+
+El agente Tester debe:
 1. **Happy Path**: Flujo normal esperado
 2. **Edge Cases**: Limites y casos extremos
 3. **Error Handling**: Manejo de errores
@@ -68,10 +110,17 @@ Generar reporte con:
 - Metricas de performance
 - Decision: Aprobar o Requiere correcciones
 
-### FASE 4: DOCUMENTACION
+**Transicion**:
+- Si APROBADO → 🟣 DOCUMENTADOR
+- Si RECHAZADO → 🟢 IMPLEMENTADOR (con lista de correcciones)
 
-Documentar completamente:
+---
 
+## 🟣 FASE 4: DOCUMENTACION
+
+**Leer instrucciones de**: `.claude/agents/documentador.md`
+
+El agente Documentador debe:
 1. **Documentacion tecnica** en `docs/`:
    - Overview del feature
    - Arquitectura
@@ -89,22 +138,52 @@ Documentar completamente:
 - Cambio 1
 - Cambio 2
 
-Co-authored-by: Claude AI (Multi-Agent Workflow)
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 ```
 
-Tipos: feat, fix, docs, refactor, test, perf, chore
+Tipos: feat, fix, docs, refactor, test, perf, chore, style
 
-## Reglas Criticas
+**Transicion**: Workflow completado → Mostrar resumen final
 
-- NO asumir informacion no confirmada
-- NO saltar pasos del flujo
-- NO generar codigo antes de autorizacion (Fase 1)
-- NO omitir consulta a documentacion (Fase 2)
-- NO aprobar con issues graves (Fase 3)
-- NO inventar informacion no proporcionada (Fase 4)
+---
+
+## Reglas Criticas del Workflow
+
+| Regla | Fase |
+|-------|------|
+| NO asumir informacion no confirmada | Todas |
+| NO saltar pasos del flujo | Todas |
+| NO generar codigo antes de autorizacion | Fase 1 |
+| NO omitir consulta a documentacion | Fase 2 |
+| NO aprobar con issues graves | Fase 3 |
+| NO inventar informacion no proporcionada | Fase 4 |
+
+---
+
+## Estado del Workflow
+
+El orquestador debe mantener un registro visual del estado:
+
+```
+🔵🟢🟠🟣 Multi-Agent Workflow
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[🔵] Fase 1: Planificacion    [ACTUAL]
+[ ] Fase 2: Implementacion
+[ ] Fase 3: Testing
+[ ] Fase 4: Documentacion
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+---
 
 ## Inicio del Workflow
 
-Comenzando Fase 1 - Planificacion...
+🔵🟢🟠🟣 **Multi-Agent Workflow Iniciado**
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔵 [PLANIFICADOR] Fase 1 - Analisis y Planificacion
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
 
 Por favor, describe la funcionalidad o cambio que necesitas implementar.

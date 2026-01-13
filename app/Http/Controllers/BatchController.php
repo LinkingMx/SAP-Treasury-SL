@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\TransactionsTemplateExport;
 use App\Imports\TransactionsImport;
 use App\Models\Batch;
 use Illuminate\Http\JsonResponse;
@@ -170,5 +171,13 @@ class BatchController extends Controller
         }, 'errores_importacion_'.now()->format('Y-m-d_His').'.txt', [
             'Content-Type' => 'text/plain',
         ]);
+    }
+
+    public function downloadTemplate(): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        return Excel::download(
+            new TransactionsTemplateExport,
+            'plantilla_transacciones.xlsx'
+        );
     }
 }

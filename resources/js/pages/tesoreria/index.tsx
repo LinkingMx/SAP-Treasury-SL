@@ -40,6 +40,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { tesoreria } from '@/routes';
+import { downloadTemplate } from '@/actions/App/Http/Controllers/BatchController';
 import {
     type BankAccount,
     type Batch,
@@ -443,7 +444,16 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                         <div className="space-y-4">
                             <div className="grid gap-4 md:grid-cols-[1fr_auto]">
                                 <div className="grid gap-2">
-                                    <Label htmlFor="file">Archivo Excel</Label>
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor="file">Archivo Excel</Label>
+                                        <a
+                                            href={downloadTemplate.url()}
+                                            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                        >
+                                            <Download className="h-3 w-3" />
+                                            Descargar plantilla de ejemplo
+                                        </a>
+                                    </div>
                                     {/* Hidden native input */}
                                     <input
                                         ref={fileInputRef}

@@ -32,6 +32,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('tesoreria/batches', [BatchController::class, 'store'])->name('batches.store');
     Route::delete('tesoreria/batches/{batch}', [BatchController::class, 'destroy'])->name('batches.destroy');
     Route::post('tesoreria/batches/error-log', [BatchController::class, 'downloadErrorLog'])->name('batches.error-log');
+    Route::get('tesoreria/template/download', [BatchController::class, 'downloadTemplate'])->name('batches.template');
 });
 
 require __DIR__.'/settings.php';

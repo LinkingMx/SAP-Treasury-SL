@@ -10,7 +10,7 @@ import { logout } from '@/routes';
 import { edit } from '@/routes/profile';
 import { type User } from '@/types';
 import { Link, router } from '@inertiajs/react';
-import { LogOut, Settings } from 'lucide-react';
+import { LogOut, Settings, SquareArrowOutUpRight } from 'lucide-react';
 
 interface UserMenuContentProps {
     user: User;
@@ -33,6 +33,18 @@ export function UserMenuContent({ user }: UserMenuContentProps) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
+                <DropdownMenuItem asChild>
+                    <a
+                        className="flex w-full cursor-pointer items-center"
+                        href="/admin"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <Settings className="mr-2" />
+                        Administración
+                        <SquareArrowOutUpRight className="ml-auto h-3 w-3 text-muted-foreground" />
+                    </a>
+                </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                     <Link
                         className="block w-full cursor-pointer"

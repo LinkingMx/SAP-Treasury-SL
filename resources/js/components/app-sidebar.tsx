@@ -12,7 +12,7 @@ import {
 import { dashboard, tesoreria } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { Landmark, LayoutGrid, Settings } from 'lucide-react';
+import { Landmark, LayoutGrid } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -20,12 +20,6 @@ const mainNavItems: NavItem[] = [
         title: 'Dashboard',
         href: dashboard(),
         icon: LayoutGrid,
-    },
-    {
-        title: 'Administración',
-        href: '/admin',
-        icon: Settings,
-        external: true,
     },
     {
         title: 'AC Tesorería',

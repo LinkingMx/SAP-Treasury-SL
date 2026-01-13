@@ -23,6 +23,7 @@ class Transaction extends Model
         'debit_amount',
         'credit_amount',
         'counterpart_account',
+        'sap_number',
     ];
 
     /**

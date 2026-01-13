@@ -59,6 +59,7 @@ export interface Transaction {
     debit_amount: string;
     credit_amount: string;
     counterpart_account: string;
+    sap_number: number | null;
 }
 
 export interface BatchDetail {

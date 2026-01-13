@@ -903,13 +903,14 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                                     <th className="px-3 py-2 text-left font-medium text-muted-foreground w-32">Cuenta</th>
                                                     <th className="px-3 py-2 text-right font-medium text-muted-foreground w-28">Débito</th>
                                                     <th className="px-3 py-2 text-right font-medium text-muted-foreground w-28">Crédito</th>
+                                                    <th className="px-3 py-2 text-right font-medium text-muted-foreground w-28">N° SAP</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-border">
                                                 {batchDetail.transactions.length === 0 ? (
                                                     <tr>
                                                         <td
-                                                            colSpan={6}
+                                                            colSpan={7}
                                                             className="text-center text-muted-foreground py-8"
                                                         >
                                                             No hay transacciones en este lote
@@ -957,6 +958,17 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                                                     </span>
                                                                 ) : (
                                                                     <span className="text-muted-foreground/40">-</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                                                                {transaction.sap_number !== null ? (
+                                                                    <span className="font-mono text-xs">
+                                                                        {transaction.sap_number}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-muted-foreground text-xs">
+                                                                        No procesado
+                                                                    </span>
                                                                 )}
                                                             </td>
                                                         </tr>

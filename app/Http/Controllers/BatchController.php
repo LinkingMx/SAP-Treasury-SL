@@ -7,6 +7,8 @@ use App\Exports\TransactionsTemplateExport;
 use App\Imports\TransactionsImport;
 use App\Jobs\ProcessBatchToSapJob;
 use App\Models\Batch;
+use App\Models\Transaction;
+use App\Services\SapServiceLayer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -219,6 +221,144 @@ class BatchController extends Controller
             'message' => 'El lote ha sido enviado a procesar en SAP',
             'status' => BatchStatus::Processing->value,
             'status_label' => BatchStatus::Processing->label(),
+        ]);
+    }
+
+    public function reprocessTransaction(Batch $batch, Transaction $transaction, SapServiceLayer $sap): JsonResponse
+    {
+        // Validate batch status
+        if (! in_array($batch->status, [BatchStatus::Failed, BatchStatus::Pending])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Solo se pueden reprocesar transacciones de lotes con estado pendiente o fallido',
+            ], 422);
+        }
+
+        // Validate transaction belongs to batch
+        if ($transaction->batch_id !== $batch->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'La transacción no pertenece a este lote',
+            ], 422);
+        }
+
+        // Validate transaction is not already processed
+        if ($transaction->sap_number !== null) {
+            return response()->json([
+                'success' => false,
+                'message' => 'La transacción ya fue procesada en SAP',
+            ], 422);
+        }
+
+        // Load batch relationships
+        $batch->load(['branch', 'bankAccount']);
+        $branch = $batch->branch;
+        $bankAccount = $batch->bankAccount;
+
+        if (! $branch || ! $bankAccount) {
+            return response()->json([
+                'success' => false,
+                'message' => 'El lote no tiene sucursal o cuenta bancaria asociada',
+            ], 422);
+        }
+
+        // Update batch status to processing
+        $batch->update([
+            'status' => BatchStatus::Processing,
+            'error_message' => null,
+        ]);
+
+        // Clear transaction error before retry
+        $transaction->update(['error' => null]);
+
+        // Login to SAP
+        try {
+            $loggedIn = $sap->login($branch->sap_database);
+            if (! $loggedIn) {
+                $batch->update([
+                    'status' => BatchStatus::Failed,
+                    'error_message' => 'No se pudo iniciar sesión en SAP Service Layer',
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se pudo iniciar sesión en SAP Service Layer',
+                ], 500);
+            }
+        } catch (\Exception $e) {
+            $batch->update([
+                'status' => BatchStatus::Failed,
+                'error_message' => 'Error de conexión a SAP: '.$e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error de conexión a SAP: '.$e->getMessage(),
+            ], 500);
+        }
+
+        // Process the transaction
+        $bplId = $branch->sap_branch_id === 0 ? null : $branch->sap_branch_id;
+
+        $result = $sap->createJournalEntry(
+            transaction: $transaction,
+            bankAccountCode: $bankAccount->account,
+            ceco: $branch->ceco,
+            bplId: $bplId
+        );
+
+        // Logout from SAP
+        $sap->logout();
+
+        if ($result['success']) {
+            $transaction->update([
+                'sap_number' => $result['jdt_num'],
+                'error' => null,
+            ]);
+
+            Log::info('Transaction reprocessed successfully', [
+                'transaction_id' => $transaction->id,
+                'jdt_num' => $result['jdt_num'],
+            ]);
+        } else {
+            $transaction->update([
+                'error' => $result['error'],
+            ]);
+
+            Log::warning('Transaction reprocessing failed', [
+                'transaction_id' => $transaction->id,
+                'error' => $result['error'],
+            ]);
+        }
+
+        // Check if all transactions in the batch are processed
+        $unprocessedCount = $batch->transactions()->whereNull('sap_number')->count();
+
+        if ($unprocessedCount === 0) {
+            $batch->update([
+                'status' => BatchStatus::Completed,
+                'error_message' => null,
+            ]);
+        } else {
+            $batch->update([
+                'status' => BatchStatus::Failed,
+                'error_message' => $unprocessedCount === 1
+                    ? '1 transacción sin procesar'
+                    : "{$unprocessedCount} transacciones sin procesar",
+            ]);
+        }
+
+        // Reload transaction for response
+        $transaction->refresh();
+
+        return response()->json([
+            'success' => $result['success'],
+            'message' => $result['success']
+                ? 'Transacción procesada exitosamente'
+                : 'Error al procesar la transacción: '.$result['error'],
+            'transaction' => $transaction,
+            'batch_status' => $batch->fresh()->status->value,
+            'batch_status_label' => $batch->fresh()->status->label(),
         ]);
     }
 }

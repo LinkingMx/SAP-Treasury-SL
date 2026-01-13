@@ -32,6 +32,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('tesoreria/batches', [BatchController::class, 'store'])->name('batches.store');
     Route::delete('tesoreria/batches/{batch}', [BatchController::class, 'destroy'])->name('batches.destroy');
     Route::post('tesoreria/batches/{batch}/process-sap', [BatchController::class, 'processToSap'])->name('batches.process-sap');
+    Route::post('tesoreria/batches/{batch}/transactions/{transaction}/reprocess', [BatchController::class, 'reprocessTransaction'])->name('batches.reprocess-transaction');
     Route::post('tesoreria/batches/error-log', [BatchController::class, 'downloadErrorLog'])->name('batches.error-log');
     Route::get('tesoreria/template/download', [BatchController::class, 'downloadTemplate'])->name('batches.template');
 });

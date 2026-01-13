@@ -97,12 +97,12 @@ class ProcessBatchToSapJob implements ShouldQueue
 
             if ($result['success']) {
                 $transaction->update([
-                    'sap_number' => $result['doc_entry'],
+                    'sap_number' => $result['jdt_num'],
                     'error' => null,
                 ]);
                 Log::info('Transaction processed successfully', [
                     'transaction_id' => $transaction->id,
-                    'doc_entry' => $result['doc_entry'],
+                    'jdt_num' => $result['jdt_num'],
                 ]);
             } else {
                 $transaction->update([

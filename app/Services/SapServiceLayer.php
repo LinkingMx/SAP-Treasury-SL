@@ -98,7 +98,7 @@ class SapServiceLayer
     /**
      * Create a Journal Entry in SAP.
      *
-     * @return array{success: bool, doc_entry: int|null, error: string|null}
+     * @return array{success: bool, jdt_num: int|null, error: string|null}
      */
     public function createJournalEntry(
         Transaction $transaction,
@@ -164,7 +164,7 @@ class SapServiceLayer
 
                 return [
                     'success' => true,
-                    'doc_entry' => $data['DocEntry'] ?? null,
+                    'jdt_num' => $data['JdtNum'] ?? null,
                     'error' => null,
                 ];
             }
@@ -179,7 +179,7 @@ class SapServiceLayer
 
             return [
                 'success' => false,
-                'doc_entry' => null,
+                'jdt_num' => null,
                 'error' => $errorMessage,
             ];
 
@@ -191,7 +191,7 @@ class SapServiceLayer
 
             return [
                 'success' => false,
-                'doc_entry' => null,
+                'jdt_num' => null,
                 'error' => 'Connection error: '.$e->getMessage(),
             ];
         }

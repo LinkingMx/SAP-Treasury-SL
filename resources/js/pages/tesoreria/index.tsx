@@ -65,6 +65,7 @@ import {
     FileSpreadsheet,
     Loader2,
     Play,
+    RefreshCw,
     Trash2,
     Upload,
     X,
@@ -114,6 +115,7 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
 
     // SAP processing state
     const [processingBatchId, setProcessingBatchId] = useState<number | null>(null);
+    const [reprocessingTransactionId, setReprocessingTransactionId] = useState<number | null>(null);
 
     const filteredBankAccounts = useMemo(() => {
         if (!selectedBranch) return [];
@@ -252,6 +254,53 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
             console.error('Error processing to SAP:', error);
         } finally {
             setProcessingBatchId(null);
+        }
+    };
+
+    const handleReprocessTransaction = async (transactionId: number) => {
+        if (!batchDetail) return;
+
+        setReprocessingTransactionId(transactionId);
+        try {
+            const response = await fetch(
+                `/tesoreria/batches/${batchDetail.id}/transactions/${transactionId}/reprocess`,
+                {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'X-CSRF-TOKEN':
+                            document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ||
+                            '',
+                    },
+                }
+            );
+
+            const data = await response.json();
+
+            if (response.ok) {
+                // Update transaction in batchDetail
+                setBatchDetail((prev) => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        status: data.batch_status,
+                        status_label: data.batch_status_label,
+                        error_message: data.batch_status === 'completed' ? null : prev.error_message,
+                        transactions: prev.transactions.map((t) =>
+                            t.id === transactionId ? data.transaction : t
+                        ),
+                    };
+                });
+
+                // Refresh batches list to reflect status changes
+                await fetchBatches(batchesPagination.currentPage);
+            } else {
+                console.error('Error reprocessing transaction:', data.message);
+            }
+        } catch (error) {
+            console.error('Error reprocessing transaction:', error);
+        } finally {
+            setReprocessingTransactionId(null);
         }
     };
 
@@ -988,13 +1037,14 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                                     <th className="px-3 py-2 text-right font-medium text-muted-foreground w-28">Crédito</th>
                                                     <th className="px-3 py-2 text-right font-medium text-muted-foreground w-28">N° SAP</th>
                                                     <th className="px-3 py-2 text-left font-medium text-muted-foreground w-40">Error</th>
+                                                    <th className="px-3 py-2 text-center font-medium text-muted-foreground w-20">Acciones</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-border">
                                                 {batchDetail.transactions.length === 0 ? (
                                                     <tr>
                                                         <td
-                                                            colSpan={8}
+                                                            colSpan={9}
                                                             className="text-center text-muted-foreground py-8"
                                                         >
                                                             No hay transacciones en este lote
@@ -1069,6 +1119,42 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                                                     </Tooltip>
                                                                 ) : (
                                                                     <span className="text-muted-foreground/40 text-xs">-</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-center">
+                                                                {transaction.sap_number === null &&
+                                                                batchDetail.status !== 'completed' ? (
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <Button
+                                                                                variant="ghost"
+                                                                                size="icon"
+                                                                                className="h-7 w-7"
+                                                                                onClick={() =>
+                                                                                    handleReprocessTransaction(
+                                                                                        transaction.id
+                                                                                    )
+                                                                                }
+                                                                                disabled={
+                                                                                    reprocessingTransactionId !== null
+                                                                                }
+                                                                            >
+                                                                                {reprocessingTransactionId ===
+                                                                                transaction.id ? (
+                                                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                                ) : (
+                                                                                    <RefreshCw className="h-3.5 w-3.5" />
+                                                                                )}
+                                                                            </Button>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent>
+                                                                            Reprocesar transacción
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                ) : (
+                                                                    <span className="text-muted-foreground/40 text-xs">
+                                                                        -
+                                                                    </span>
                                                                 )}
                                                             </td>
                                                         </tr>

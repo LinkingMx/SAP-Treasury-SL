@@ -816,22 +816,22 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                             </div>
 
                             {/* Summary Cards */}
-                            <div className="grid grid-cols-3 gap-4">
-                                <div className="bg-muted/50 rounded-lg p-4 text-center">
-                                    <p className="text-2xl font-bold">{batchDetail.total_records}</p>
-                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Registros</p>
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                                    <p className="text-xl md:text-2xl font-bold">{batchDetail.total_records}</p>
+                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Registros</p>
                                 </div>
-                                <div className="bg-red-500/10 rounded-lg p-4 text-center">
-                                    <p className="text-2xl font-bold text-red-500">
+                                <div className="bg-red-500/10 rounded-lg p-3 text-center">
+                                    <p className="text-lg md:text-xl font-bold text-red-500 tabular-nums">
                                         ${formatCurrency(batchDetail.total_debit)}
                                     </p>
-                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Débito</p>
+                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Débito</p>
                                 </div>
-                                <div className="bg-green-500/10 rounded-lg p-4 text-center">
-                                    <p className="text-2xl font-bold text-green-500">
+                                <div className="bg-green-500/10 rounded-lg p-3 text-center">
+                                    <p className="text-lg md:text-xl font-bold text-green-500 tabular-nums">
                                         ${formatCurrency(batchDetail.total_credit)}
                                     </p>
-                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Crédito</p>
+                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Crédito</p>
                                 </div>
                             </div>
 
@@ -840,17 +840,17 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                 <h4 className="font-medium mb-3 text-sm uppercase tracking-wide text-muted-foreground">
                                     Transacciones ({batchDetail.transactions.length})
                                 </h4>
-                                <div className="border rounded-lg overflow-hidden">
-                                    <div className="max-h-[300px] overflow-auto">
+                                <div className="border rounded-lg">
+                                    <div className="max-h-[280px] overflow-auto">
                                         <Table>
-                                            <TableHeader className="sticky top-0 bg-background">
+                                            <TableHeader className="sticky top-0 bg-muted/80 backdrop-blur-sm">
                                                 <TableRow>
-                                                    <TableHead className="w-12">#</TableHead>
-                                                    <TableHead className="w-28">Fecha</TableHead>
-                                                    <TableHead className="min-w-[200px]">Memo</TableHead>
-                                                    <TableHead className="w-32">Contrapartida</TableHead>
-                                                    <TableHead className="w-32 text-right">Débito</TableHead>
-                                                    <TableHead className="w-32 text-right">Crédito</TableHead>
+                                                    <TableHead className="w-10 text-center">#</TableHead>
+                                                    <TableHead className="w-24">Fecha</TableHead>
+                                                    <TableHead>Memo</TableHead>
+                                                    <TableHead className="w-28">Cuenta</TableHead>
+                                                    <TableHead className="w-28 text-right">Débito</TableHead>
+                                                    <TableHead className="w-28 text-right">Crédito</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
@@ -865,11 +865,11 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                                     </TableRow>
                                                 ) : (
                                                     batchDetail.transactions.map((transaction) => (
-                                                        <TableRow key={transaction.id}>
-                                                            <TableCell className="font-mono text-xs text-muted-foreground">
+                                                        <TableRow key={transaction.id} className="text-sm">
+                                                            <TableCell className="font-mono text-xs text-muted-foreground text-center">
                                                                 {transaction.sequence}
                                                             </TableCell>
-                                                            <TableCell className="text-sm">
+                                                            <TableCell className="text-xs whitespace-nowrap">
                                                                 {new Date(transaction.due_date).toLocaleDateString(
                                                                     'es-MX'
                                                                 )}
@@ -877,34 +877,34 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                                             <TableCell>
                                                                 <Tooltip>
                                                                     <TooltipTrigger asChild>
-                                                                        <span className="block max-w-[250px] truncate cursor-default">
+                                                                        <span className="block truncate max-w-[180px] cursor-default text-sm">
                                                                             {transaction.memo}
                                                                         </span>
                                                                     </TooltipTrigger>
-                                                                    <TooltipContent side="top" className="max-w-sm">
+                                                                    <TooltipContent side="top" className="max-w-xs">
                                                                         {transaction.memo}
                                                                     </TooltipContent>
                                                                 </Tooltip>
                                                             </TableCell>
-                                                            <TableCell className="font-mono text-xs">
+                                                            <TableCell className="font-mono text-xs whitespace-nowrap">
                                                                 {transaction.counterpart_account}
                                                             </TableCell>
-                                                            <TableCell className="text-right font-medium">
+                                                            <TableCell className="text-right tabular-nums">
                                                                 {Number(transaction.debit_amount) > 0 ? (
-                                                                    <span className="text-red-500">
+                                                                    <span className="text-red-500 font-medium">
                                                                         ${formatCurrency(transaction.debit_amount)}
                                                                     </span>
                                                                 ) : (
-                                                                    <span className="text-muted-foreground">-</span>
+                                                                    <span className="text-muted-foreground/50">-</span>
                                                                 )}
                                                             </TableCell>
-                                                            <TableCell className="text-right font-medium">
+                                                            <TableCell className="text-right tabular-nums">
                                                                 {Number(transaction.credit_amount) > 0 ? (
-                                                                    <span className="text-green-500">
+                                                                    <span className="text-green-500 font-medium">
                                                                         ${formatCurrency(transaction.credit_amount)}
                                                                     </span>
                                                                 ) : (
-                                                                    <span className="text-muted-foreground">-</span>
+                                                                    <span className="text-muted-foreground/50">-</span>
                                                                 )}
                                                             </TableCell>
                                                         </TableRow>

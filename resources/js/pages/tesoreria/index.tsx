@@ -10,6 +10,13 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -35,6 +42,7 @@ import { tesoreria } from '@/routes';
 import {
     type BankAccount,
     type Batch,
+    type BatchDetail,
     type BatchResult,
     type Branch,
     type BreadcrumbItem,
@@ -92,6 +100,11 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [batchToDelete, setBatchToDelete] = useState<Batch | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    // Batch detail modal state
+    const [batchDetailOpen, setBatchDetailOpen] = useState(false);
+    const [batchDetail, setBatchDetail] = useState<BatchDetail | null>(null);
+    const [batchDetailLoading, setBatchDetailLoading] = useState(false);
 
     const filteredBankAccounts = useMemo(() => {
         if (!selectedBranch) return [];
@@ -174,6 +187,30 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
             console.error('Error deleting batch:', error);
         } finally {
             setIsDeleting(false);
+        }
+    };
+
+    const fetchBatchDetail = async (batch: Batch) => {
+        setBatchDetailLoading(true);
+        setBatchDetailOpen(true);
+        setBatchDetail(null);
+        try {
+            const response = await fetch(`/tesoreria/batches/${batch.id}`, {
+                headers: {
+                    Accept: 'application/json',
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error('Error al cargar el detalle del lote');
+            }
+
+            const data: BatchDetail = await response.json();
+            setBatchDetail(data);
+        } catch (error) {
+            console.error('Error fetching batch detail:', error);
+        } finally {
+            setBatchDetailLoading(false);
         }
     };
 
@@ -608,6 +645,7 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                                             size="icon"
                                                             className="h-8 w-8"
                                                             title="Ver detalle"
+                                                            onClick={() => fetchBatchDetail(batch)}
                                                         >
                                                             <Eye className="h-4 w-4" />
                                                         </Button>
@@ -707,6 +745,139 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {/* Batch Detail Modal */}
+            <Dialog open={batchDetailOpen} onOpenChange={setBatchDetailOpen}>
+                <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+                    <DialogHeader>
+                        <DialogTitle>Detalle del Lote</DialogTitle>
+                        <DialogDescription>
+                            Información completa del lote y sus transacciones
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {batchDetailLoading ? (
+                        <div className="flex items-center justify-center py-12">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : batchDetail ? (
+                        <div className="flex-1 overflow-y-auto space-y-6">
+                            {/* Batch Info */}
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                                <div>
+                                    <p className="text-muted-foreground">UUID</p>
+                                    <p className="font-mono font-medium">{batchDetail.uuid}</p>
+                                </div>
+                                <div>
+                                    <p className="text-muted-foreground">Archivo</p>
+                                    <p className="font-medium truncate" title={batchDetail.filename}>
+                                        {batchDetail.filename}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-muted-foreground">Fecha procesado</p>
+                                    <p className="font-medium">
+                                        {batchDetail.processed_at ? formatDate(batchDetail.processed_at) : '-'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-muted-foreground">Sucursal</p>
+                                    <p className="font-medium">{batchDetail.branch?.name || '-'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-muted-foreground">Cuenta bancaria</p>
+                                    <p className="font-medium">{batchDetail.bank_account?.name || '-'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-muted-foreground">Creado por</p>
+                                    <p className="font-medium">{batchDetail.user || '-'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-muted-foreground">Total registros</p>
+                                    <p className="font-medium">{batchDetail.total_records}</p>
+                                </div>
+                                <div>
+                                    <p className="text-muted-foreground">Total débito</p>
+                                    <p className="font-medium text-red-600">
+                                        ${formatCurrency(batchDetail.total_debit)}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-muted-foreground">Total crédito</p>
+                                    <p className="font-medium text-green-600">
+                                        ${formatCurrency(batchDetail.total_credit)}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Transactions Table */}
+                            <div>
+                                <h4 className="font-medium mb-3">
+                                    Transacciones ({batchDetail.transactions.length})
+                                </h4>
+                                <div className="border rounded-lg overflow-hidden">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="w-16">#</TableHead>
+                                                <TableHead>Fecha</TableHead>
+                                                <TableHead>Memo</TableHead>
+                                                <TableHead>Contrapartida</TableHead>
+                                                <TableHead className="text-right">Débito</TableHead>
+                                                <TableHead className="text-right">Crédito</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {batchDetail.transactions.length === 0 ? (
+                                                <TableRow>
+                                                    <TableCell
+                                                        colSpan={6}
+                                                        className="text-center text-muted-foreground py-8"
+                                                    >
+                                                        No hay transacciones en este lote
+                                                    </TableCell>
+                                                </TableRow>
+                                            ) : (
+                                                batchDetail.transactions.map((transaction) => (
+                                                    <TableRow key={transaction.id}>
+                                                        <TableCell className="font-mono text-xs">
+                                                            {transaction.sequence}
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            {new Date(transaction.due_date).toLocaleDateString(
+                                                                'es-MX'
+                                                            )}
+                                                        </TableCell>
+                                                        <TableCell
+                                                            className="max-w-[200px] truncate"
+                                                            title={transaction.memo}
+                                                        >
+                                                            {transaction.memo}
+                                                        </TableCell>
+                                                        <TableCell className="font-mono text-xs">
+                                                            {transaction.counterpart_account}
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            {Number(transaction.debit_amount) > 0
+                                                                ? `$${formatCurrency(transaction.debit_amount)}`
+                                                                : '-'}
+                                                        </TableCell>
+                                                        <TableCell className="text-right">
+                                                            {Number(transaction.credit_amount) > 0
+                                                                ? `$${formatCurrency(transaction.credit_amount)}`
+                                                                : '-'}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </div>
+                        </div>
+                    ) : null}
+                </DialogContent>
+            </Dialog>
         </AppLayout>
     );
 }

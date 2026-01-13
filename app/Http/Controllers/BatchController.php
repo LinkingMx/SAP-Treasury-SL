@@ -29,6 +29,25 @@ class BatchController extends Controller
         return response()->json($batches);
     }
 
+    public function show(Batch $batch): JsonResponse
+    {
+        $batch->load(['branch', 'bankAccount', 'user', 'transactions']);
+
+        return response()->json([
+            'id' => $batch->id,
+            'uuid' => $batch->uuid,
+            'filename' => $batch->filename,
+            'total_records' => $batch->total_records,
+            'total_debit' => $batch->total_debit,
+            'total_credit' => $batch->total_credit,
+            'processed_at' => $batch->processed_at?->format('Y-m-d H:i:s'),
+            'branch' => $batch->branch,
+            'bank_account' => $batch->bankAccount,
+            'user' => $batch->user?->name,
+            'transactions' => $batch->transactions,
+        ]);
+    }
+
     public function destroy(Batch $batch): JsonResponse
     {
         $batch->delete();

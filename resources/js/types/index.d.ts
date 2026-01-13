@@ -45,6 +45,31 @@ export interface Batch {
     updated_at: string;
 }
 
+export interface Transaction {
+    id: number;
+    batch_id: number;
+    sequence: number;
+    due_date: string;
+    memo: string;
+    debit_amount: string;
+    credit_amount: string;
+    counterpart_account: string;
+}
+
+export interface BatchDetail {
+    id: number;
+    uuid: string;
+    filename: string;
+    total_records: number;
+    total_debit: string;
+    total_credit: string;
+    processed_at: string;
+    branch: Branch;
+    bank_account: BankAccount;
+    user: string | null;
+    transactions: Transaction[];
+}
+
 export interface PaginatedResponse<T> {
     data: T[];
     current_page: number;

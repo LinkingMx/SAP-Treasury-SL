@@ -3,6 +3,7 @@
 use App\Filament\Resources\Users\Pages\CreateUser;
 use App\Filament\Resources\Users\Pages\EditUser;
 use App\Filament\Resources\Users\Pages\ListUsers;
+use App\Models\Branch;
 use App\Models\User;
 use Filament\Actions\DeleteAction;
 use Livewire\Livewire;
@@ -204,4 +205,46 @@ it('can assign roles to a user', function () {
 
     $user = User::where('email', 'admin@example.com')->first();
     expect($user->hasRole('admin'))->toBeTrue();
+});
+
+it('can assign branches to a user', function () {
+    $branches = Branch::factory()->count(2)->create();
+
+    Livewire::test(CreateUser::class)
+        ->fillForm([
+            'name' => 'Branch User',
+            'email' => 'branch@example.com',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'branches' => $branches->pluck('id')->toArray(),
+        ])
+        ->call('create')
+        ->assertNotified()
+        ->assertRedirect();
+
+    $user = User::where('email', 'branch@example.com')->first();
+    expect($user->branches)->toHaveCount(2);
+    expect($user->branches->pluck('id')->toArray())->toEqual($branches->pluck('id')->toArray());
+});
+
+it('can update user branches', function () {
+    $user = User::factory()->create();
+    $branches = Branch::factory()->count(3)->create();
+
+    // Initially assign 2 branches
+    $user->branches()->attach($branches->take(2)->pluck('id'));
+
+    Livewire::test(EditUser::class, [
+        'record' => $user->id,
+    ])
+        ->fillForm([
+            'branches' => [$branches->last()->id],
+        ])
+        ->call('save')
+        ->assertNotified()
+        ->assertRedirect();
+
+    $user->refresh();
+    expect($user->branches)->toHaveCount(1);
+    expect($user->branches->first()->id)->toBe($branches->last()->id);
 });

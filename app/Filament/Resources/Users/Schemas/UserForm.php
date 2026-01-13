@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Users\Schemas;
 
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -69,6 +70,19 @@ class UserForm
                             ->relationship('roles', 'name')
                             ->columns(2)
                             ->helperText('Selecciona los roles que tendrá este usuario'),
+                    ])
+                    ->columns(1),
+
+                Section::make('Sucursales')
+                    ->description('Asigna las sucursales a las que tendrá acceso el usuario')
+                    ->schema([
+                        Select::make('branches')
+                            ->label('Sucursales')
+                            ->relationship('branches', 'name')
+                            ->multiple()
+                            ->preload()
+                            ->searchable()
+                            ->helperText('Selecciona una o más sucursales'),
                     ])
                     ->columns(1),
             ]);

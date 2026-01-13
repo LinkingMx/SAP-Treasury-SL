@@ -119,6 +119,15 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
             });
 
             setUploadProgress(80);
+
+            // Handle non-JSON responses (like HTML error pages)
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                console.error('Non-JSON response:', text.substring(0, 500));
+                throw new Error(`El servidor respondió con un error (${response.status})`);
+            }
+
             const data = await response.json();
             setUploadProgress(100);
 
@@ -131,11 +140,20 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                 }
             } else {
                 setUploadStatus('error');
-                setErrors(data.errors || []);
+                // Handle both validation errors and general errors
+                if (data.errors && Array.isArray(data.errors)) {
+                    setErrors(data.errors);
+                } else if (data.message) {
+                    setErrors([{ row: 0, error: data.message }]);
+                } else {
+                    setErrors([{ row: 0, error: 'Error desconocido al procesar el archivo' }]);
+                }
             }
-        } catch {
+        } catch (err) {
             setUploadStatus('error');
-            setErrors([{ row: 0, error: 'Error de conexión. Intente nuevamente.' }]);
+            const errorMessage = err instanceof Error ? err.message : 'Error de conexión';
+            console.error('Upload error:', err);
+            setErrors([{ row: 0, error: errorMessage }]);
         } finally {
             setIsUploading(false);
         }

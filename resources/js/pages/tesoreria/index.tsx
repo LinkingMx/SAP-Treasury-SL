@@ -64,6 +64,7 @@ import {
     Eye,
     FileSpreadsheet,
     Loader2,
+    Play,
     Trash2,
     Upload,
     X,
@@ -110,6 +111,9 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
     const [batchDetailOpen, setBatchDetailOpen] = useState(false);
     const [batchDetail, setBatchDetail] = useState<BatchDetail | null>(null);
     const [batchDetailLoading, setBatchDetailLoading] = useState(false);
+
+    // SAP processing state
+    const [processingBatchId, setProcessingBatchId] = useState<number | null>(null);
 
     const filteredBankAccounts = useMemo(() => {
         if (!selectedBranch) return [];
@@ -216,6 +220,38 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
             console.error('Error fetching batch detail:', error);
         } finally {
             setBatchDetailLoading(false);
+        }
+    };
+
+    const handleProcessToSap = async (batch: Batch) => {
+        if (batch.status === 'processing' || batch.status === 'completed') {
+            return;
+        }
+
+        setProcessingBatchId(batch.id);
+        try {
+            const response = await fetch(`/tesoreria/batches/${batch.id}/process-sap`, {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN':
+                        document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ||
+                        '',
+                },
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                console.error('Error processing to SAP:', data.message);
+                return;
+            }
+
+            // Refresh batches to show updated status
+            await fetchBatches(batchesPagination.currentPage);
+        } catch (error) {
+            console.error('Error processing to SAP:', error);
+        } finally {
+            setProcessingBatchId(null);
         }
     };
 
@@ -694,27 +730,63 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     <div className="flex justify-end gap-2">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-8 w-8"
-                                                            title="Ver detalle"
-                                                            onClick={() => fetchBatchDetail(batch)}
-                                                        >
-                                                            <Eye className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="h-8 w-8 text-destructive hover:text-destructive"
-                                                            title="Eliminar lote"
-                                                            onClick={() => {
-                                                                setBatchToDelete(batch);
-                                                                setDeleteDialogOpen(true);
-                                                            }}
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8"
+                                                                    onClick={() => fetchBatchDetail(batch)}
+                                                                >
+                                                                    <Eye className="h-4 w-4" />
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>Ver detalle</TooltipContent>
+                                                        </Tooltip>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8"
+                                                                    onClick={() => handleProcessToSap(batch)}
+                                                                    disabled={
+                                                                        batch.status === 'processing' ||
+                                                                        batch.status === 'completed' ||
+                                                                        processingBatchId === batch.id
+                                                                    }
+                                                                >
+                                                                    {processingBatchId === batch.id ? (
+                                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                                    ) : (
+                                                                        <Play className="h-4 w-4" />
+                                                                    )}
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                {batch.status === 'completed'
+                                                                    ? 'Ya procesado'
+                                                                    : batch.status === 'processing'
+                                                                      ? 'Procesando...'
+                                                                      : 'Procesar a SAP'}
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8 text-destructive hover:text-destructive"
+                                                                    onClick={() => {
+                                                                        setBatchToDelete(batch);
+                                                                        setDeleteDialogOpen(true);
+                                                                    }}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>Eliminar lote</TooltipContent>
+                                                        </Tooltip>
                                                     </div>
                                                 </TableCell>
                                             </TableRow>
@@ -904,13 +976,14 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                                     <th className="px-3 py-2 text-right font-medium text-muted-foreground w-28">Débito</th>
                                                     <th className="px-3 py-2 text-right font-medium text-muted-foreground w-28">Crédito</th>
                                                     <th className="px-3 py-2 text-right font-medium text-muted-foreground w-28">N° SAP</th>
+                                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground w-40">Error</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-border">
                                                 {batchDetail.transactions.length === 0 ? (
                                                     <tr>
                                                         <td
-                                                            colSpan={7}
+                                                            colSpan={8}
                                                             className="text-center text-muted-foreground py-8"
                                                         >
                                                             No hay transacciones en este lote
@@ -969,6 +1042,22 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                                                                     <span className="text-muted-foreground text-xs">
                                                                         No procesado
                                                                     </span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-left">
+                                                                {transaction.error ? (
+                                                                    <Tooltip>
+                                                                        <TooltipTrigger asChild>
+                                                                            <span className="text-xs text-destructive truncate block max-w-[150px] cursor-default">
+                                                                                {transaction.error}
+                                                                            </span>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent side="left" className="max-w-sm">
+                                                                            {transaction.error}
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                ) : (
+                                                                    <span className="text-muted-foreground/40 text-xs">-</span>
                                                                 )}
                                                             </td>
                                                         </tr>

@@ -24,6 +24,7 @@ class Transaction extends Model
         'credit_amount',
         'counterpart_account',
         'sap_number',
+        'error',
     ];
 
     /**

@@ -28,6 +28,7 @@ class TransactionFactory extends Factory
             'credit_amount' => $isDebit ? 0 : fake()->randomFloat(2, 100, 10000),
             'counterpart_account' => fake()->numerify('####-####'),
             'sap_number' => null,
+            'error' => null,
         ];
     }
 }

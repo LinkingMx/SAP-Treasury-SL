@@ -60,6 +60,7 @@ export interface Transaction {
     credit_amount: string;
     counterpart_account: string;
     sap_number: number | null;
+    error: string | null;
 }
 
 export interface BatchDetail {

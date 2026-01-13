@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'sap_service_layer' => [
+        'base_url' => env('SAP_SL_BASE_URL'),
+        'username' => env('SAP_SL_USERNAME'),
+        'password' => env('SAP_SL_PASSWORD'),
+    ],
+
 ];

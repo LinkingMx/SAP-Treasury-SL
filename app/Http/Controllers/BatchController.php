@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\BatchStatus;
 use App\Exports\TransactionsTemplateExport;
 use App\Imports\TransactionsImport;
+use App\Jobs\ProcessBatchToSapJob;
 use App\Models\Batch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -183,5 +185,36 @@ class BatchController extends Controller
             new TransactionsTemplateExport,
             'plantilla_transacciones.xlsx'
         );
+    }
+
+    public function processToSap(Batch $batch): JsonResponse
+    {
+        // Check if batch is already being processed or completed
+        if ($batch->status === BatchStatus::Processing) {
+            return response()->json([
+                'success' => false,
+                'message' => 'El lote ya está siendo procesado',
+            ], 422);
+        }
+
+        if ($batch->status === BatchStatus::Completed) {
+            return response()->json([
+                'success' => false,
+                'message' => 'El lote ya fue procesado exitosamente',
+            ], 422);
+        }
+
+        // Update status to processing
+        $batch->update(['status' => BatchStatus::Processing]);
+
+        // Dispatch job to queue
+        ProcessBatchToSapJob::dispatch($batch);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'El lote ha sido enviado a procesar en SAP',
+            'status' => BatchStatus::Processing->value,
+            'status_label' => BatchStatus::Processing->label(),
+        ]);
     }
 }

@@ -49,10 +49,8 @@ class AdminPanelProvider extends PanelProvider
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->navigationGroups([
                 NavigationGroup::make('Tesorería')
-                    ->icon('heroicon-o-building-library')
                     ->collapsible(),
                 NavigationGroup::make('Administración')
-                    ->icon('heroicon-o-cog-6-tooth')
                     ->collapsible(),
             ])
             ->pages([

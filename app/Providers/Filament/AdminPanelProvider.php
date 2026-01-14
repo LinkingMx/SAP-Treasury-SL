@@ -31,6 +31,9 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->login()
+            ->brandLogo(asset('images/logo_white.svg'))
+            ->darkModeBrandLogo(asset('images/logo_dark.svg'))
+            ->brandLogoHeight('2.5rem')
             ->font('Roboto')
             ->defaultThemeMode(ThemeMode::Dark)
             ->colors([

@@ -98,7 +98,7 @@
     --accent-foreground: #191731;
     --destructive: oklch(0.577 0.245 27.325);
     --destructive-foreground: #FFFFFF;
-    --border: #191731;
+    --border: transparent;
     --input: #191731;
     --ring: #C5A059;
     --chart-1: #C5A059;

@@ -46,9 +46,10 @@ class BankAccountForm
                                 ignoreRecord: true,
                                 modifyRuleUsing: fn (Unique $rule, callable $get) => $rule->where('branch_id', $get('branch_id'))
                             )
-                            ->helperText('Número de cuenta bancaria (debe ser único por sucursal)'),
+                            ->helperText('Número de cuenta bancaria (debe ser único por sucursal)')
+                            ->columnSpanFull(),
                     ])
-                    ->columns(1),
+                    ->columns(2),
             ]);
     }
 }

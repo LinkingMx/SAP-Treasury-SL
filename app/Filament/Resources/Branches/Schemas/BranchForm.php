@@ -21,7 +21,8 @@ class BranchForm
                             ->prefixIcon('heroicon-o-building-office-2')
                             ->placeholder('Sucursal Centro')
                             ->required()
-                            ->maxLength(255),
+                            ->maxLength(255)
+                            ->columnSpanFull(),
 
                         TextInput::make('sap_database')
                             ->label('Base de Datos SAP')
@@ -55,7 +56,7 @@ class BranchForm
                             ->regex('/^\d{18}$/')
                             ->helperText('Cuenta CLABE de 18 dígitos para transferencias Afirme'),
                     ])
-                    ->columns(1),
+                    ->columns(2),
             ]);
     }
 }

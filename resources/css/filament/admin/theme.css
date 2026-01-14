@@ -1,0 +1,200 @@
+/* Import Playfair Display for headings (Luxury Serif) */
+@import url('https://fonts.bunny.net/css?family=playfair-display:400,500,600,700&display=swap');
+
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+@source '../../../../app/Filament/**/*';
+@source '../../../../resources/views/filament/**/*';
+
+/*
+|--------------------------------------------------------------------------
+| Costeño Luxury UI Theme
+|--------------------------------------------------------------------------
+|
+| Design System: Navy Deep + Cream Champagne
+| Brand: Costeño Group (Hospitality & Lifestyle)
+| Aesthetic: Quiet Luxury, Exclusivity, Premium Ambiance
+|
+*/
+
+/* Custom Theme Variables */
+@theme {
+    /* Costeño Brand Colors */
+    --color-navy-base: #0B0E21;
+    --color-navy-darker: #080A19;
+    --color-cream-primary: #E6DFD1;
+    --color-gold-accent: #C5A059;
+
+    /* Typography - Luxury Serif for Headings */
+    --font-heading: 'Playfair Display', ui-serif, Georgia, Cambria, serif;
+}
+
+/* Headings with Playfair Display (Luxury Serif) */
+.fi-header-heading,
+.fi-section-header-heading,
+.fi-modal-heading,
+.fi-sidebar-header,
+h1, h2, h3 {
+    font-family: var(--font-heading) !important;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+}
+
+/* Page Title Styling */
+.fi-header-heading {
+    font-weight: 600 !important;
+    letter-spacing: -0.02em;
+}
+
+/* Buttons - Luxury Uppercase Style */
+.fi-btn {
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 500;
+}
+
+/* Primary Button Enhancements */
+.fi-btn-primary {
+    transition: all 0.3s ease;
+}
+
+.fi-btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(230, 223, 209, 0.3);
+}
+
+/* Sidebar Branding */
+.fi-sidebar {
+    border-right-color: rgba(230, 223, 209, 0.1);
+}
+
+/* Navigation Items - Elegant Hover */
+.fi-sidebar-item-button:hover {
+    background-color: rgba(230, 223, 209, 0.08);
+}
+
+/* Active Navigation State */
+.fi-sidebar-item-active .fi-sidebar-item-button {
+    background-color: rgba(230, 223, 209, 0.12);
+    border-left: 2px solid var(--color-cream-primary);
+}
+
+/* Cards - Luxury Surface Treatment */
+.fi-section,
+.fi-card {
+    border-color: rgba(230, 223, 209, 0.1);
+}
+
+/* Dark Mode Card Enhancement */
+:is(.dark) .fi-section,
+:is(.dark) .fi-card {
+    background-color: rgba(11, 14, 33, 0.6);
+    backdrop-filter: blur(8px);
+}
+
+/* Table Header - Refined Style */
+.fi-ta-header-cell {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* Input Fields - Elegant Focus */
+.fi-input:focus,
+.fi-select:focus {
+    border-color: var(--color-cream-primary);
+    box-shadow: 0 0 0 2px rgba(230, 223, 209, 0.2);
+}
+
+/* Modal Overlay - Premium Feel */
+.fi-modal-window {
+    backdrop-filter: blur(4px);
+}
+
+/* Badge Refinements */
+.fi-badge {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.65rem;
+}
+
+/* Dropdown Menu - Luxury */
+.fi-dropdown-panel {
+    border-color: rgba(230, 223, 209, 0.15);
+}
+
+:is(.dark) .fi-dropdown-panel {
+    background-color: var(--color-navy-darker);
+}
+
+/* Login Page Branding */
+.fi-simple-layout {
+    background: linear-gradient(135deg, var(--color-navy-darker) 0%, var(--color-navy-base) 100%);
+}
+
+/* Footer Links */
+.fi-simple-footer a {
+    color: var(--color-cream-primary);
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.fi-simple-footer a:hover {
+    opacity: 1;
+}
+
+/* Scrollbar Styling (Webkit) */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-navy-darker);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(230, 223, 209, 0.2);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(230, 223, 209, 0.3);
+}
+
+/* Gold Accent for Special Elements */
+.fi-badge-warning,
+.fi-color-warning {
+    --c-400: var(--color-gold-accent);
+    --c-500: var(--color-gold-accent);
+}
+
+/* Notification Toasts */
+.fi-notification {
+    border-left: 3px solid var(--color-cream-primary);
+}
+
+/* Stats Widget Enhancement */
+.fi-wi-stats-overview-stat {
+    border-color: rgba(230, 223, 209, 0.1);
+}
+
+/* Form Section Headers */
+.fi-section-header {
+    border-bottom-color: rgba(230, 223, 209, 0.1);
+}
+
+/* Empty State Styling */
+.fi-ta-empty-state {
+    color: rgba(230, 223, 209, 0.5);
+}
+
+/* Pagination Styling */
+.fi-pagination-item-button {
+    border-color: rgba(230, 223, 209, 0.2);
+}
+
+.fi-pagination-item-button:hover {
+    background-color: rgba(230, 223, 209, 0.1);
+}

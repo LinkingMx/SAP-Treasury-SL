@@ -9,7 +9,6 @@ use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Navigation\NavigationGroup;
-use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Widgets\AccountWidget;
@@ -33,8 +32,9 @@ class AdminPanelProvider extends PanelProvider
             ->login()
             ->brandLogo(asset('images/logo_white.svg'))
             ->darkModeBrandLogo(asset('images/logo_dark.svg'))
-            ->brandLogoHeight('2.5rem')
-            ->font('Roboto')
+            ->brandLogoHeight('2rem')
+            ->favicon(asset('images/favicon.svg'))
+            ->font('Open Sans')
             ->defaultThemeMode(ThemeMode::Dark)
             ->colors([
                 // Costeño Luxury UI - Primary: Cream Champagne
@@ -88,9 +88,8 @@ class AdminPanelProvider extends PanelProvider
                 NavigationGroup::make('Administración')
                     ->collapsible(),
             ])
-            ->pages([
-                Dashboard::class,
-            ])
+            ->pages([])
+            ->homeUrl('/admin/branches')
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->widgets([
                 AccountWidget::class,

@@ -29,6 +29,7 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->font('Instrument Sans')
             ->colors([
                 'primary' => '#1B1B3A', // Azul marino Costeño
                 'gray' => [

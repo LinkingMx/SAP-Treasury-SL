@@ -1,6 +1,3 @@
-/* Import Playfair Display for headings (Luxury Serif) */
-@import url('https://fonts.bunny.net/css?family=playfair-display:400,500,600,700&display=swap');
-
 @import '../../../../vendor/filament/filament/resources/css/theme.css';
 
 @source '../../../../app/Filament/**/*';
@@ -14,6 +11,7 @@
 | Design System: Navy Deep + Cream Champagne
 | Brand: Costeño Group (Hospitality & Lifestyle)
 | Aesthetic: Quiet Luxury, Exclusivity, Premium Ambiance
+| Typography: Roboto
 |
 */
 
@@ -24,33 +22,6 @@
     --color-navy-darker: #080A19;
     --color-cream-primary: #E6DFD1;
     --color-gold-accent: #C5A059;
-
-    /* Typography - Luxury Serif for Headings */
-    --font-heading: 'Playfair Display', ui-serif, Georgia, Cambria, serif;
-}
-
-/* Headings with Playfair Display (Luxury Serif) */
-.fi-header-heading,
-.fi-section-header-heading,
-.fi-modal-heading,
-.fi-sidebar-header,
-h1, h2, h3 {
-    font-family: var(--font-heading) !important;
-    font-weight: 500;
-    letter-spacing: -0.01em;
-}
-
-/* Page Title Styling */
-.fi-header-heading {
-    font-weight: 600 !important;
-    letter-spacing: -0.02em;
-}
-
-/* Buttons - Luxury Uppercase Style */
-.fi-btn {
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    font-weight: 500;
 }
 
 /* Primary Button Enhancements */

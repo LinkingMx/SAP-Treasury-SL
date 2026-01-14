@@ -31,7 +31,7 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->login()
-            ->font('Inter')
+            ->font('Roboto')
             ->defaultThemeMode(ThemeMode::Dark)
             ->colors([
                 // Costeño Luxury UI - Primary: Cream Champagne

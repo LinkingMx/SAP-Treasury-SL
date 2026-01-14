@@ -17,7 +17,7 @@ import AppLogo from './app-logo';
 
 const platformItems: NavItem[] = [
     {
-        title: 'Dashboard',
+        title: 'Panel',
         href: dashboard(),
         icon: LayoutGrid,
     },
@@ -47,7 +47,7 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={platformItems} label="Platform" />
+                <NavMain items={platformItems} label="Plataforma" />
                 <NavMain items={bankingItems} label="Opciones de bancos" />
             </SidebarContent>
 

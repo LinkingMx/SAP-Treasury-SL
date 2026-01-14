@@ -16,6 +16,7 @@ class BankAccountForm
             ->components([
                 Section::make('Información de la Cuenta Bancaria')
                     ->description('Datos de la cuenta bancaria y su sucursal asociada')
+                    ->columnSpanFull()
                     ->schema([
                         Select::make('branch_id')
                             ->label('Sucursal')

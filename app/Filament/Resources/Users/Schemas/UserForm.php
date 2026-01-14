@@ -18,6 +18,7 @@ class UserForm
         return $schema
             ->components([
                 Grid::make(2)
+                    ->columnSpanFull()
                     ->schema([
                         // Left column: User information
                         Section::make('Información del Usuario')

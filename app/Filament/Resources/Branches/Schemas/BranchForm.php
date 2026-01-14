@@ -14,6 +14,7 @@ class BranchForm
             ->components([
                 Section::make('Información de la Sucursal')
                     ->description('Datos de la sucursal y su configuración en SAP')
+                    ->columnSpanFull()
                     ->schema([
                         TextInput::make('name')
                             ->label('Nombre')

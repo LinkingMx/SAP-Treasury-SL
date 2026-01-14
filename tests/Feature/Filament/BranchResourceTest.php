@@ -79,6 +79,7 @@ it('can render the edit page', function () {
             'name' => $branch->name,
             'sap_database' => $branch->sap_database,
             'sap_branch_id' => $branch->sap_branch_id,
+            'afirme_account' => $branch->afirme_account,
         ]);
 });
 
@@ -138,3 +139,58 @@ it('can sort branches by name', function () {
         ->sortTable('name', 'desc')
         ->assertCanSeeTableRecords($branches->sortByDesc('name'), inOrder: true);
 });
+
+it('can create a branch with afirme_account', function () {
+    Livewire::test(CreateBranch::class)
+        ->fillForm([
+            'name' => 'Sucursal Afirme',
+            'sap_database' => 'SBO_AFIRME',
+            'sap_branch_id' => 5,
+            'afirme_account' => '012345678901234567',
+        ])
+        ->call('create')
+        ->assertNotified()
+        ->assertRedirect();
+
+    assertDatabaseHas(Branch::class, [
+        'name' => 'Sucursal Afirme',
+        'afirme_account' => '012345678901234567',
+    ]);
+});
+
+it('can update a branch with afirme_account', function () {
+    $branch = Branch::factory()->create(['afirme_account' => null]);
+
+    Livewire::test(EditBranch::class, [
+        'record' => $branch->id,
+    ])
+        ->fillForm([
+            'afirme_account' => '987654321098765432',
+        ])
+        ->call('save')
+        ->assertNotified()
+        ->assertRedirect();
+
+    assertDatabaseHas(Branch::class, [
+        'id' => $branch->id,
+        'afirme_account' => '987654321098765432',
+    ]);
+});
+
+it('validates afirme_account must be exactly 18 digits', function (string $invalidAccount) {
+    Livewire::test(CreateBranch::class)
+        ->fillForm([
+            'name' => 'Test Branch',
+            'sap_database' => 'SBO_TEST',
+            'sap_branch_id' => 1,
+            'afirme_account' => $invalidAccount,
+        ])
+        ->call('create')
+        ->assertHasFormErrors(['afirme_account' => 'regex'])
+        ->assertNotNotified()
+        ->assertNoRedirect();
+})->with([
+    'too short (10 chars)' => '1234567890',
+    'too long (20 chars)' => '12345678901234567890',
+    'contains letters' => 'ABCDEFGH1234567890',
+]);

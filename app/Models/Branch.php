@@ -22,6 +22,7 @@ class Branch extends Model
         'sap_database',
         'sap_branch_id',
         'ceco',
+        'afirme_account',
     ];
 
     /**

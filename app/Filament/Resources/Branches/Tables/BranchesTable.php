@@ -34,6 +34,13 @@ class BranchesTable
                     ->sortable()
                     ->placeholder('—'),
 
+                TextColumn::make('afirme_account')
+                    ->label('Cuenta Afirme')
+                    ->searchable()
+                    ->sortable()
+                    ->placeholder('—')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 TextColumn::make('created_at')
                     ->label('Creado')
                     ->dateTime('d/m/Y H:i')

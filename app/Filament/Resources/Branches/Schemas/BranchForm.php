@@ -45,6 +45,14 @@ class BranchForm
                             ->placeholder('CC-001')
                             ->maxLength(255)
                             ->helperText('Código del centro de costos en SAP'),
+
+                        TextInput::make('afirme_account')
+                            ->label('Cuenta CLABE Afirme')
+                            ->prefixIcon('heroicon-o-credit-card')
+                            ->placeholder('012345678901234567')
+                            ->maxLength(18)
+                            ->regex('/^\d{18}$/')
+                            ->helperText('Cuenta CLABE de 18 dígitos para transferencias Afirme'),
                     ])
                     ->columns(1),
             ]);

@@ -37,35 +37,35 @@ class AdminPanelProvider extends PanelProvider
             ->font('Open Sans')
             ->defaultThemeMode(ThemeMode::Dark)
             ->colors([
-                // Costeño Luxury UI - Primary: Cream Champagne
+                // Costeño Brand - Primary: Cream (#EBDFC7)
                 'primary' => [
                     50 => '#FDFCFA',
-                    100 => '#FAF8F4',
-                    200 => '#F5F1EA',
-                    300 => '#EDE7DC',
-                    400 => '#E6DFD1', // CREAM_PRIMARY
-                    500 => '#D4C9B5',
+                    100 => '#FAF7F2',
+                    200 => '#F5EFE6',
+                    300 => '#EBDFC7', // CREAM_OFFICIAL
+                    400 => '#E0D4B8',
+                    500 => '#D4C9A9',
                     600 => '#B8A88E',
                     700 => '#968568',
                     800 => '#746550',
                     900 => '#584C3D',
                     950 => '#3D352A',
                 ],
-                // Gray scale → Navy tones (Costeño Navy)
+                // Gray scale → Navy tones (Navy Official: #191731)
                 'gray' => [
-                    50 => '#F4F4F8',   // Light mode backgrounds
-                    100 => '#E8E8F0',
-                    200 => '#D1D1E0',
+                    50 => '#FDFCFA',   // Light backgrounds (cream tint)
+                    100 => '#F5EFE6',
+                    200 => '#E0D4B8',
                     300 => '#A8A8C0',
-                    400 => '#7070A0',
-                    500 => '#4A4A78',
-                    600 => '#2E2E58',
-                    700 => '#1A1A40',
-                    800 => '#121230',
-                    900 => '#0B0E21',  // NAVY_BASE
-                    950 => '#080A19',  // NAVY_DARKER
+                    400 => '#6B6B90',
+                    500 => '#3D3870',
+                    600 => '#2A2650',
+                    700 => '#1E1B3D',
+                    800 => '#191731', // NAVY_OFFICIAL
+                    900 => '#121025',
+                    950 => '#0D0F1A', // NAVY_DARKER
                 ],
-                // Warning/Accent: Gold
+                // Warning/Accent: Gold (#C5A059)
                 'warning' => [
                     50 => '#FDF9F0',
                     100 => '#FAF0DC',

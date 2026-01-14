@@ -109,7 +109,7 @@ class SapServiceLayer
         if (! $this->sessionId) {
             return [
                 'success' => false,
-                'doc_entry' => null,
+                'jdt_num' => null,
                 'error' => 'Not logged in to SAP Service Layer',
             ];
         }

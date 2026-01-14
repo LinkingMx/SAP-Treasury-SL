@@ -13,6 +13,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use UnitEnum;
 
 class BankAccountResource extends Resource
 {
@@ -25,6 +26,10 @@ class BankAccountResource extends Resource
     protected static ?string $pluralModelLabel = 'Cuentas Bancarias';
 
     protected static ?string $navigationLabel = 'Cuentas Bancarias';
+
+    protected static string|UnitEnum|null $navigationGroup = 'Tesorería';
+
+    protected static ?int $navigationSort = 2;
 
     public static function form(Schema $schema): Schema
     {

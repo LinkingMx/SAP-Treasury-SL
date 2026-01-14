@@ -7,10 +7,10 @@ use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Navigation\NavigationGroup;
 use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
-use Filament\Support\Colors\Color;
 use Filament\Widgets\AccountWidget;
 use Filament\Widgets\FilamentInfoWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
@@ -30,10 +30,31 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->login()
             ->colors([
-                'primary' => Color::Amber,
+                'primary' => '#1B1B3A', // Azul marino Costeño
+                'gray' => [
+                    50 => '#faf9f7',
+                    100 => '#f2ece4',
+                    200 => '#e8dfd3',
+                    300 => '#d4c8b8',
+                    400 => '#b8a792',
+                    500 => '#9d8a73',
+                    600 => '#8a7662',
+                    700 => '#736252',
+                    800 => '#5f5145',
+                    900 => '#4e433a',
+                    950 => '#2a231e',
+                ],
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
+            ->navigationGroups([
+                NavigationGroup::make('Tesorería')
+                    ->icon('heroicon-o-building-library')
+                    ->collapsible(),
+                NavigationGroup::make('Administración')
+                    ->icon('heroicon-o-cog-6-tooth')
+                    ->collapsible(),
+            ])
             ->pages([
                 Dashboard::class,
             ])

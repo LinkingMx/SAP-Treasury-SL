@@ -641,35 +641,34 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
 
                         {/* Success Alert */}
                         {successResult && (
-                            <Alert className="border-green-500 bg-green-50 dark:bg-green-950">
-                                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                                <AlertTitle className="text-green-800 dark:text-green-200">
-                                    Archivo procesado exitosamente
-                                </AlertTitle>
-                                <AlertDescription className="text-green-700 dark:text-green-300">
-                                    <div className="mt-2 space-y-1">
+                            <Alert variant="success">
+                                <CheckCircle2 className="h-4 w-4" />
+                                <AlertTitle>Archivo procesado exitosamente</AlertTitle>
+                                <AlertDescription>
+                                    <div className="mt-2 space-y-1 text-sm">
                                         <p>
-                                            <strong>Lote:</strong> {successResult.uuid}
+                                            <span className="opacity-70">Lote:</span>{' '}
+                                            <span className="font-medium">{successResult.uuid}</span>
                                         </p>
                                         <p>
-                                            <strong>Registros:</strong> {successResult.total_records}
+                                            <span className="opacity-70">Registros:</span>{' '}
+                                            <span className="font-medium">{successResult.total_records}</span>
                                         </p>
                                         <p>
-                                            <strong>Total Débito:</strong> $
-                                            {Number(successResult.total_debit).toLocaleString(
-                                                'es-MX',
-                                                { minimumFractionDigits: 2 }
-                                            )}
+                                            <span className="opacity-70">Total Débito:</span>{' '}
+                                            <span className="font-medium">
+                                                ${Number(successResult.total_debit).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                            </span>
                                         </p>
                                         <p>
-                                            <strong>Total Crédito:</strong> $
-                                            {Number(successResult.total_credit).toLocaleString(
-                                                'es-MX',
-                                                { minimumFractionDigits: 2 }
-                                            )}
+                                            <span className="opacity-70">Total Crédito:</span>{' '}
+                                            <span className="font-medium">
+                                                ${Number(successResult.total_credit).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                            </span>
                                         </p>
                                         <p>
-                                            <strong>Procesado:</strong> {successResult.processed_at}
+                                            <span className="opacity-70">Procesado:</span>{' '}
+                                            <span className="font-medium">{successResult.processed_at}</span>
                                         </p>
                                     </div>
                                 </AlertDescription>

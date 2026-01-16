@@ -120,6 +120,20 @@ return [
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
+        'sap_sqlsrv' => [
+            'driver' => 'sqlsrv',
+            'host' => env('SAP_SQLSRV_HOST', 'localhost'),
+            'port' => env('SAP_SQLSRV_PORT', '1433'),
+            'database' => env('SAP_SQLSRV_DATABASE', ''),
+            'username' => env('SAP_SQLSRV_USERNAME', ''),
+            'password' => env('SAP_SQLSRV_PASSWORD', ''),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'encrypt' => env('SAP_SQLSRV_ENCRYPT', 'no'),
+            'trust_server_certificate' => env('SAP_SQLSRV_TRUST_CERT', 'true'),
+        ],
+
     ],
 
     /*

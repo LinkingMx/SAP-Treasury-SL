@@ -9,10 +9,10 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard, tesoreria } from '@/routes';
+import { afirme, dashboard, tesoreria } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { Landmark, LayoutGrid } from 'lucide-react';
+import { FileText, Landmark, LayoutGrid } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const platformItems: NavItem[] = [
@@ -28,6 +28,11 @@ const bankingItems: NavItem[] = [
         title: 'AC Tesorería',
         href: tesoreria(),
         icon: Landmark,
+    },
+    {
+        title: 'Integración Afirme',
+        href: afirme(),
+        icon: FileText,
     },
 ];
 

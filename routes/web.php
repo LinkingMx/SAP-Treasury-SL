@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AfirmeController;
 use App\Http\Controllers\BatchController;
 use App\Models\BankAccount;
 use Illuminate\Support\Facades\Route;
@@ -30,6 +31,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('tesoreria/batches/{batch}/transactions/{transaction}/reprocess', [BatchController::class, 'reprocessTransaction'])->name('batches.reprocess-transaction');
     Route::post('tesoreria/batches/error-log', [BatchController::class, 'downloadErrorLog'])->name('batches.error-log');
     Route::get('tesoreria/template/download', [BatchController::class, 'downloadTemplate'])->name('batches.template');
+
+    // Afirme Integration
+    Route::get('afirme', [AfirmeController::class, 'index'])->name('afirme');
+    Route::get('afirme/payments', [AfirmeController::class, 'getPayments'])->name('afirme.payments');
+    Route::post('afirme/download', [AfirmeController::class, 'downloadTxt'])->name('afirme.download');
 });
 
 require __DIR__.'/settings.php';

@@ -256,7 +256,7 @@ class TransactionClassifier
     }
 
     /**
-     * Classify a chunk of transactions with AI using pattern matching against learned rules.
+     * Classify a chunk of transactions with AI using similarity matching against learned rules.
      *
      * @param  array<int, array>  $chunk
      * @param  array<int, array{code: string, name: string}>  $chartOfAccounts
@@ -275,50 +275,39 @@ class TransactionClassifier
             return $this->markChunkAsUnclassified($chunk);
         }
 
-        // Build rules table with RFC, keywords, and movement type
-        $rulesTable = "| ID | CUENTA_SAP   | RFC          | KEYWORDS                    | TIPO_MOV |\n";
-        $rulesTable .= '|'.str_repeat('-', 80)."|\n";
+        // Build rules list with pattern and account
+        $rulesList = '';
         foreach ($learningRules as $i => $rule) {
-            $rfc = $this->extractRfc($rule['pattern']) ?? 'NULL';
-            $keywords = $this->extractKeywords($rule['pattern']);
-            $keywordsStr = ! empty($keywords) ? implode(', ', array_slice($keywords, 0, 3)) : 'NULL';
-            $movType = $this->getMovementTypeFromMemo($rule['pattern']);
-            $rulesTable .= sprintf("| %-2d | %-12s | %-12s | %-27s | %-8s |\n",
-                $i + 1, $rule['sap_code'], $rfc, substr($keywordsStr, 0, 27), $movType);
+            $pattern = substr($rule['pattern'], 0, 150);
+            $rulesList .= sprintf("%d. [%s] %s\n", $i + 1, $rule['sap_code'], $pattern);
         }
 
-        // Build transactions table with amount and extracted info
-        $transTable = "| SEQ | MONTO       | RFC          | KEYWORDS                    | TIPO_MOV |\n";
-        $transTable .= '|'.str_repeat('-', 85)."|\n";
+        // Build transactions list with memo
+        $transList = '';
         foreach ($chunk as $t) {
-            $amount = ($t['debit_amount'] ?? 0) > 0 ? -($t['debit_amount']) : ($t['credit_amount'] ?? 0);
-            $rfc = $this->extractRfc($t['memo']) ?? 'NULL';
-            $keywords = $this->extractKeywords($t['memo']);
-            $keywordsStr = ! empty($keywords) ? implode(', ', array_slice($keywords, 0, 3)) : 'NULL';
-            $movType = $this->getMovementType($t['debit_amount'], $t['credit_amount']);
-            $transTable .= sprintf("| %-3d | %10.2f | %-12s | %-27s | %-8s |\n",
-                $t['sequence'], $amount, $rfc, substr($keywordsStr, 0, 27), $movType);
+            $memo = substr($t['memo'], 0, 150);
+            $type = ($t['debit_amount'] ?? 0) > 0 ? 'CARGO' : 'ABONO';
+            $transList .= sprintf("%d. [%s] %s\n", $t['sequence'], $type, $memo);
         }
 
         $prompt = <<<PROMPT
-ROL: Eres un Asistente Contable. Asigna cuentas SAP a transacciones usando reglas jerárquicas.
+Eres un clasificador de transacciones bancarias. Tu tarea es asignar cuentas SAP basándote en la SIMILITUD entre los memos de las transacciones y los patrones de las reglas aprendidas.
 
-REGLAS APRENDIDAS (prioridad: RFC > KEYWORDS > TIPO_MOV):
-{$rulesTable}
+REGLAS APRENDIDAS (formato: [CUENTA_SAP] PATRON):
+{$rulesList}
 
-TRANSACCIONES A CLASIFICAR:
-{$transTable}
+TRANSACCIONES A CLASIFICAR (formato: [TIPO] MEMO):
+{$transList}
 
 INSTRUCCIONES:
-1. MONTO negativo = CARGO (egreso), positivo = ABONO (ingreso)
-2. Busca en orden estricto:
-   a) ¿RFC coincide exacto? → Usa esa cuenta (conf: 95)
-   b) ¿KEYWORDS coinciden? → Usa esa cuenta (conf: 85)
-   c) ¿Solo TIPO_MOV coincide? → Usa cuenta genérica (conf: 70)
-3. Si no hay match, devuelve sap: null
+1. Compara cada memo de transacción con los patrones de las reglas
+2. Busca SIMILITUD en el texto: mismas palabras clave, mismo tipo de operación, mismo beneficiario/pagador
+3. NO uses RFC como criterio - ignora los números de referencia y rastreo
+4. Si el memo es SIMILAR a un patrón (mismas palabras importantes), asigna esa cuenta
+5. Confianza: 90+ si muy similar, 70-89 si parcialmente similar, 0 si no hay match
 
-RESPONDE solo JSON array minificado:
-[{"seq":1,"sap":"1010-000-000","conf":95},{"seq":2,"sap":null,"conf":0}]
+RESPONDE SOLO con JSON array (sin explicaciones):
+[{"seq":1,"sap":"1010-000-000","conf":90},{"seq":2,"sap":null,"conf":0}]
 PROMPT;
 
         // Log the prompt for debugging

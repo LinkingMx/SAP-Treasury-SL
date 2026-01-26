@@ -2,7 +2,9 @@
 
 namespace App\Services\Ai;
 
+use App\Models\Branch;
 use App\Models\LearningRule;
+use App\Models\SapAccount;
 use Gemini\Client as GeminiClient;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -424,6 +426,35 @@ PROMPT;
                 'source' => 'error',
             ]);
         }, $chunk);
+    }
+
+    /**
+     * Get chart of accounts for a branch (local first, SAP fallback).
+     *
+     * @return array<int, array{code: string, name: string}>
+     */
+    public function getChartOfAccounts(Branch $branch): array
+    {
+        // First try local database
+        $localAccounts = SapAccount::getChartOfAccounts($branch->id);
+
+        if (! empty($localAccounts)) {
+            Log::info('Using local SAP accounts', [
+                'branch_id' => $branch->id,
+                'branch_name' => $branch->name,
+                'count' => count($localAccounts),
+            ]);
+
+            return $localAccounts;
+        }
+
+        // Fallback to SAP direct query
+        Log::warning('No local SAP accounts, falling back to SAP query', [
+            'branch_id' => $branch->id,
+            'branch_name' => $branch->name,
+        ]);
+
+        return $this->fetchChartOfAccounts($branch->sap_database);
     }
 
     /**

@@ -52,4 +52,12 @@ class Branch extends Model
     {
         return $this->belongsToMany(User::class);
     }
+
+    /**
+     * Get the SAP accounts for the branch.
+     */
+    public function sapAccounts(): HasMany
+    {
+        return $this->hasMany(SapAccount::class);
+    }
 }

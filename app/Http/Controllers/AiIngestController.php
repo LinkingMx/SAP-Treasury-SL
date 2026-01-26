@@ -93,8 +93,8 @@ class AiIngestController extends Controller
             // Get branch for SAP database connection
             $branch = Branch::findOrFail($request->input('branch_id'));
 
-            // Fetch chart of accounts from SAP
-            $chartOfAccounts = $this->classifier->fetchChartOfAccounts($branch->sap_database);
+            // Get chart of accounts from local database (sync required first)
+            $chartOfAccounts = $this->classifier->getChartOfAccounts($branch);
             $sapConnected = ! empty($chartOfAccounts);
 
             // Classify transactions (rules_only skips AI classification)

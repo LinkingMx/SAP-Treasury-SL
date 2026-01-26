@@ -279,21 +279,28 @@ class AiIngestController extends Controller
             ], 422);
         }
 
-        // Check if rule already exists
-        $existingRule = LearningRule::where('pattern', $pattern)
-            ->where('sap_account_code', $request->input('sap_account_code'))
-            ->first();
+        // Check if rule with same pattern already exists (update it)
+        $existingRule = LearningRule::where('pattern', $pattern)->first();
 
         if ($existingRule) {
-            // Increase confidence
+            // Update existing rule with new account
             $existingRule->update([
-                'confidence_score' => min(100, $existingRule->confidence_score + 5),
+                'sap_account_code' => $request->input('sap_account_code'),
+                'sap_account_name' => $request->input('sap_account_name'),
+                'confidence_score' => 100,
+                'source' => 'user_correction',
+            ]);
+
+            Log::info('Learning rule updated', [
+                'pattern' => $pattern,
+                'old_account' => $existingRule->getOriginal('sap_account_code'),
+                'new_account' => $request->input('sap_account_code'),
             ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Regla existente actualizada.',
-                'rule' => $existingRule,
+                'message' => 'Regla actualizada.',
+                'rule' => $existingRule->fresh(),
                 'is_new' => false,
             ]);
         }
@@ -308,7 +315,7 @@ class AiIngestController extends Controller
             'source' => 'user_correction',
         ]);
 
-        Log::info('Learning rule created manually', [
+        Log::info('Learning rule created', [
             'pattern' => $pattern,
             'account' => $request->input('sap_account_code'),
         ]);

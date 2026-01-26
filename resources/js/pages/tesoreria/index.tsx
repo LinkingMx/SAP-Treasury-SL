@@ -504,7 +504,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                         </TabsTrigger>
                         <TabsTrigger value="ai" className="flex items-center gap-2">
                             <Bot className="h-4 w-4" />
-                            Ingesta con IA
+                            Carga con IA
                         </TabsTrigger>
                     </TabsList>
 

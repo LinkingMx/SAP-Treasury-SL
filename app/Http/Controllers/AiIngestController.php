@@ -64,6 +64,7 @@ class AiIngestController extends Controller
             'file' => 'required|file|mimes:xlsx,xls,csv|max:10240',
             'parse_config' => 'required|string',
             'branch_id' => 'required|exists:branches,id',
+            'rules_only' => 'nullable|boolean',
         ]);
 
         // Decode parse_config from JSON string
@@ -95,8 +96,9 @@ class AiIngestController extends Controller
             // Fetch chart of accounts from SAP
             $chartOfAccounts = $this->classifier->fetchChartOfAccounts($branch->sap_database);
 
-            // Classify transactions
-            $classifiedTransactions = $this->classifier->classify($transactions, $chartOfAccounts);
+            // Classify transactions (rules_only skips AI classification)
+            $rulesOnly = $request->boolean('rules_only', false);
+            $classifiedTransactions = $this->classifier->classify($transactions, $chartOfAccounts, $rulesOnly);
 
             // Calculate totals
             $totalDebit = 0;

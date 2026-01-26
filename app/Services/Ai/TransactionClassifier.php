@@ -13,13 +13,14 @@ class TransactionClassifier
     protected const CHUNK_SIZE = 50;
 
     /**
-     * Classify transactions using rules and AI.
+     * Classify transactions using rules and optionally AI.
      *
      * @param  array<int, array{sequence: int, due_date: string, memo: string, debit_amount: float|null, credit_amount: float|null}>  $transactions
      * @param  array<int, array{code: string, name: string}>  $chartOfAccounts
+     * @param  bool  $rulesOnly  If true, skip AI classification and only use rules
      * @return array<int, array{sequence: int, due_date: string, memo: string, debit_amount: float|null, credit_amount: float|null, sap_account_code: string|null, sap_account_name: string|null, confidence: int, source: string}>
      */
-    public function classify(array $transactions, array $chartOfAccounts): array
+    public function classify(array $transactions, array $chartOfAccounts, bool $rulesOnly = false): array
     {
         $classified = [];
         $unclassified = [];
@@ -40,19 +41,22 @@ class TransactionClassifier
             }
         }
 
-        // Second pass: classify remaining with AI (AI now uses learned rules as context)
-        if (! empty($unclassified) && ! empty($chartOfAccounts)) {
-            $aiClassified = $this->classifyWithAi($unclassified, $chartOfAccounts);
-            $classified = array_merge($classified, $aiClassified);
-        } elseif (! empty($unclassified)) {
-            // No chart of accounts available, mark as unclassified
-            foreach ($unclassified as $transaction) {
-                $classified[] = array_merge($transaction, [
-                    'sap_account_code' => null,
-                    'sap_account_name' => null,
-                    'confidence' => 0,
-                    'source' => 'none',
-                ]);
+        // Second pass: classify remaining with AI (unless rulesOnly mode)
+        if (! empty($unclassified)) {
+            if (! $rulesOnly && ! empty($chartOfAccounts)) {
+                // Use AI classification with learned rules as context
+                $aiClassified = $this->classifyWithAi($unclassified, $chartOfAccounts);
+                $classified = array_merge($classified, $aiClassified);
+            } else {
+                // Rules only mode or no chart of accounts - mark as unclassified
+                foreach ($unclassified as $transaction) {
+                    $classified[] = array_merge($transaction, [
+                        'sap_account_code' => null,
+                        'sap_account_name' => null,
+                        'confidence' => 0,
+                        'source' => 'none',
+                    ]);
+                }
             }
         }
 

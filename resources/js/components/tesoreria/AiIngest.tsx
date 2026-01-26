@@ -383,6 +383,7 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
             classifyFormData.append('file', selectedFile);
             classifyFormData.append('parse_config', JSON.stringify(parseConfig));
             classifyFormData.append('branch_id', selectedBranch);
+            classifyFormData.append('rules_only', '1'); // Only use rules, skip AI
 
             const classifyResponse = await fetch('/tesoreria/ai/classify-preview', {
                 method: 'POST',
@@ -689,12 +690,12 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
                         {isReclassifying ? (
                             <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Reclasificando...
+                                Aplicando reglas...
                             </>
                         ) : (
                             <>
                                 <RotateCcw className="mr-2 h-4 w-4" />
-                                Reclasificar
+                                Aplicar Reglas
                             </>
                         )}
                     </Button>

@@ -790,7 +790,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                                                 <TableCell className="max-w-[200px] truncate">
                                                     {batch.filename}
                                                 </TableCell>
-                                                <TableCell>{formatDate(batch.processed_at)}</TableCell>
+                                                <TableCell>{formatDate(batch.created_at)}</TableCell>
                                                 <TableCell>
                                                     <Badge
                                                         variant={batch.status === 'failed' ? 'destructive' : 'default'}

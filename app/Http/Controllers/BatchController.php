@@ -28,7 +28,7 @@ class BatchController extends Controller
         $batches = Batch::query()
             ->where('branch_id', $request->input('branch_id'))
             ->where('bank_account_id', $request->input('bank_account_id'))
-            ->orderBy('processed_at', 'desc')
+            ->orderByDesc('created_at')
             ->paginate(10);
 
         return response()->json($batches);
@@ -49,6 +49,7 @@ class BatchController extends Controller
             'status_label' => $batch->status->label(),
             'error_message' => $batch->error_message,
             'processed_at' => $batch->processed_at?->format('Y-m-d H:i:s'),
+            'created_at' => $batch->created_at->format('Y-m-d H:i:s'),
             'branch' => $batch->branch,
             'bank_account' => $batch->bankAccount,
             'user' => $batch->user?->name,

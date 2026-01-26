@@ -104,7 +104,7 @@ export interface Batch {
     total_debit: string;
     total_credit: string;
     status: BatchStatus;
-    processed_at: string;
+    processed_at: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -132,7 +132,8 @@ export interface BatchDetail {
     status: BatchStatus;
     status_label: string;
     error_message: string | null;
-    processed_at: string;
+    processed_at: string | null;
+    created_at: string;
     branch: Branch;
     bank_account: BankAccount;
     user: string | null;

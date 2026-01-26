@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 
 class TransactionClassifier
 {
-    protected const CHUNK_SIZE = 50;
+    protected const CHUNK_SIZE = 200;
 
     /**
      * Classify transactions using rules and optionally AI.
@@ -44,8 +44,10 @@ class TransactionClassifier
         // Second pass: classify remaining with AI (unless rulesOnly mode)
         if (! empty($unclassified)) {
             if (! $rulesOnly && ! empty($chartOfAccounts)) {
-                // Use AI classification with learned rules as context
-                $aiClassified = $this->classifyWithAi($unclassified, $chartOfAccounts);
+                // Get transactions classified by rules as context for AI
+                $ruleClassified = array_filter($classified, fn ($t) => $t['source'] === 'rule');
+                // Use AI classification with learned rules AND rule-classified transactions as context
+                $aiClassified = $this->classifyWithAi($unclassified, $chartOfAccounts, array_values($ruleClassified));
                 $classified = array_merge($classified, $aiClassified);
             } else {
                 // Rules only mode or no chart of accounts - mark as unclassified
@@ -91,9 +93,10 @@ class TransactionClassifier
      *
      * @param  array<int, array>  $transactions
      * @param  array<int, array{code: string, name: string}>  $chartOfAccounts
+     * @param  array<int, array>  $ruleClassified  Transactions already classified by rules (context for AI)
      * @return array<int, array>
      */
-    protected function classifyWithAi(array $transactions, array $chartOfAccounts): array
+    protected function classifyWithAi(array $transactions, array $chartOfAccounts, array $ruleClassified = []): array
     {
         $classified = [];
         $chunks = array_chunk($transactions, self::CHUNK_SIZE);
@@ -108,7 +111,7 @@ class TransactionClassifier
         $limitedChartOfAccounts = array_slice($chartOfAccounts, 0, 100);
 
         foreach ($chunks as $chunk) {
-            $chunkClassified = $this->classifyChunkWithAi($chunk, $limitedChartOfAccounts, $accountMap);
+            $chunkClassified = $this->classifyChunkWithAi($chunk, $limitedChartOfAccounts, $accountMap, $ruleClassified);
             $classified = array_merge($classified, $chunkClassified);
         }
 
@@ -116,7 +119,7 @@ class TransactionClassifier
     }
 
     /**
-     * Get learning rules formatted for AI context.
+     * Get learning rules formatted for AI context (high confidence only).
      *
      * @return array<int, array{pattern: string, account_code: string, account_name: string|null}>
      */
@@ -136,74 +139,206 @@ class TransactionClassifier
     }
 
     /**
-     * Classify a chunk of transactions with AI.
+     * Get ALL learning rules with full pattern text for AI pattern matching.
+     *
+     * @return array<int, array{pattern: string, sap_code: string, sap_name: string|null}>
      */
-    protected function classifyChunkWithAi(array $chunk, array $chartOfAccounts, array $accountMap): array
+    protected function getAllLearningRulesForAi(): array
     {
-        $transactionsForPrompt = array_map(function ($t) {
-            return [
-                'sequence' => $t['sequence'],
-                'memo' => $t['memo'],
-                'debit' => $t['debit_amount'],
-                'credit' => $t['credit_amount'],
-            ];
-        }, $chunk);
+        return LearningRule::query()
+            ->orderByDesc('confidence_score')
+            ->get(['pattern', 'sap_account_code', 'sap_account_name'])
+            ->map(fn ($rule) => [
+                'pattern' => $rule->pattern,
+                'sap_code' => $rule->sap_account_code,
+                'sap_name' => $rule->sap_account_name,
+            ])
+            ->toArray();
+    }
 
-        $chartJson = json_encode($chartOfAccounts, JSON_UNESCAPED_UNICODE);
-        $transactionsJson = json_encode($transactionsForPrompt, JSON_UNESCAPED_UNICODE);
+    /**
+     * Extract RFC from a bank memo if present.
+     */
+    protected function extractRfc(string $memo): ?string
+    {
+        // RFC pattern: 3-4 letters + 6 digits + 3 alphanumeric (12-13 chars total)
+        if (preg_match('/RFC\s+([A-Z]{3,4}\d{6}[A-Z0-9]{3})/i', $memo, $matches)) {
+            return strtoupper($matches[1]);
+        }
+        // Also try without RFC prefix
+        if (preg_match('/\b([A-Z]{3,4}\d{6}[A-Z0-9]{3})\b/', $memo, $matches)) {
+            return strtoupper($matches[1]);
+        }
 
-        // Get learned rules as context for AI
-        $learningRules = $this->getLearningRulesForAi();
-        $rulesSection = '';
-        if (! empty($learningRules)) {
-            $rulesJson = json_encode($learningRules, JSON_UNESCAPED_UNICODE);
-            $rulesSection = <<<RULES
+        return null;
+    }
 
-REGLAS APRENDIDAS (clasificaciones previas confirmadas por el usuario - PRIORIDAD ALTA):
-{$rulesJson}
+    /**
+     * Extract keywords from a bank memo for matching.
+     */
+    protected function extractKeywords(string $memo): array
+    {
+        $keywords = [];
+        $text = strtoupper($memo);
 
-IMPORTANTE: Si una descripción contiene un patrón de las reglas aprendidas, USA esa cuenta con confidence 95-100.
-RULES;
+        // High priority: Company/service identifiers
+        $companyKeywords = [
+            'UBR PAGOS', 'UBER EATS', 'UBER',
+            'RAPPI', 'RAPPIPAYMENT', 'TECNOLOGIAS RAPPI',
+            'DIDI', 'CLIP', 'MERCADO PAGO',
+        ];
+
+        foreach ($companyKeywords as $kw) {
+            if (str_contains($text, $kw)) {
+                $keywords[] = $kw;
+            }
+        }
+
+        // Medium priority: Transaction type keywords
+        $typeKeywords = [
+            'COMISION', 'IVA POR COMISION', 'IVA',
+            'RENTA TPV', 'RENTA TERMINAL',
+            'NOMINA', 'PAYROLL', 'AGUINALDO',
+            'DEPOSITO EN EFECTIVO', 'DEPOSITO VENTAS DEL DIA',
+        ];
+
+        foreach ($typeKeywords as $kw) {
+            if (str_contains($text, $kw)) {
+                $keywords[] = $kw;
+            }
+        }
+
+        // Low priority: Generic movement types
+        if (str_contains($text, 'SPEI RECIBIDO')) {
+            $keywords[] = 'SPEI RECIBIDO';
+        } elseif (str_contains($text, 'SPEI ENVIADO')) {
+            $keywords[] = 'SPEI ENVIADO';
+        } elseif (str_contains($text, 'TRANSFERENCIA')) {
+            $keywords[] = 'TRANSFERENCIA';
+        } elseif (str_contains($text, 'DEPOSITO')) {
+            $keywords[] = 'DEPOSITO';
+        }
+
+        return array_unique($keywords);
+    }
+
+    /**
+     * Determine movement type from memo and amounts.
+     */
+    protected function getMovementType(?float $debit, ?float $credit): string
+    {
+        if ($debit !== null && $debit > 0) {
+            return 'CARGO';
+        }
+        if ($credit !== null && $credit > 0) {
+            return 'ABONO';
+        }
+
+        return 'DESCONOCIDO';
+    }
+
+    /**
+     * Get movement type from memo text.
+     */
+    protected function getMovementTypeFromMemo(string $memo): string
+    {
+        $text = strtoupper($memo);
+        if (str_contains($text, 'SPEI RECIBIDO') || str_contains($text, 'DEPOSITO') || str_contains($text, 'ABONO')) {
+            return 'ABONO';
+        }
+        if (str_contains($text, 'SPEI ENVIADO') || str_contains($text, 'PAGO') || str_contains($text, 'CARGO')) {
+            return 'CARGO';
+        }
+
+        return 'DESCONOCIDO';
+    }
+
+    /**
+     * Classify a chunk of transactions with AI using pattern matching against learned rules.
+     *
+     * @param  array<int, array>  $chunk
+     * @param  array<int, array{code: string, name: string}>  $chartOfAccounts
+     * @param  array<string, string>  $accountMap
+     * @param  array<int, array>  $ruleClassified  Transactions already classified by rules (context)
+     */
+    protected function classifyChunkWithAi(array $chunk, array $chartOfAccounts, array $accountMap, array $ruleClassified = []): array
+    {
+        // Get ALL learned rules
+        $learningRules = $this->getAllLearningRulesForAi();
+
+        // If no rules exist, we can't do pattern matching
+        if (empty($learningRules)) {
+            Log::info('No learning rules available for AI pattern matching');
+
+            return $this->markChunkAsUnclassified($chunk);
+        }
+
+        // Build rules table with RFC, keywords, and movement type
+        $rulesTable = "| ID | CUENTA_SAP   | RFC          | KEYWORDS                    | TIPO_MOV |\n";
+        $rulesTable .= '|'.str_repeat('-', 80)."|\n";
+        foreach ($learningRules as $i => $rule) {
+            $rfc = $this->extractRfc($rule['pattern']) ?? 'NULL';
+            $keywords = $this->extractKeywords($rule['pattern']);
+            $keywordsStr = ! empty($keywords) ? implode(', ', array_slice($keywords, 0, 3)) : 'NULL';
+            $movType = $this->getMovementTypeFromMemo($rule['pattern']);
+            $rulesTable .= sprintf("| %-2d | %-12s | %-12s | %-27s | %-8s |\n",
+                $i + 1, $rule['sap_code'], $rfc, substr($keywordsStr, 0, 27), $movType);
+        }
+
+        // Build transactions table with amount and extracted info
+        $transTable = "| SEQ | MONTO       | RFC          | KEYWORDS                    | TIPO_MOV |\n";
+        $transTable .= '|'.str_repeat('-', 85)."|\n";
+        foreach ($chunk as $t) {
+            $amount = ($t['debit_amount'] ?? 0) > 0 ? -($t['debit_amount']) : ($t['credit_amount'] ?? 0);
+            $rfc = $this->extractRfc($t['memo']) ?? 'NULL';
+            $keywords = $this->extractKeywords($t['memo']);
+            $keywordsStr = ! empty($keywords) ? implode(', ', array_slice($keywords, 0, 3)) : 'NULL';
+            $movType = $this->getMovementType($t['debit_amount'], $t['credit_amount']);
+            $transTable .= sprintf("| %-3d | %10.2f | %-12s | %-27s | %-8s |\n",
+                $t['sequence'], $amount, $rfc, substr($keywordsStr, 0, 27), $movType);
         }
 
         $prompt = <<<PROMPT
-Actúa como un Contador Senior experto en SAP Business One.
-Objetivo: Asignar la cuenta contable correcta basándote en la descripción bancaria.
+ROL: Eres un Asistente Contable. Asigna cuentas SAP a transacciones usando reglas jerárquicas.
 
-CATÁLOGO DE CUENTAS SAP (muestra):
-{$chartJson}
-{$rulesSection}
+REGLAS APRENDIDAS (prioridad: RFC > KEYWORDS > TIPO_MOV):
+{$rulesTable}
 
-INPUT (Transacciones a clasificar):
-{$transactionsJson}
+TRANSACCIONES A CLASIFICAR:
+{$transTable}
 
-REGLAS DE NEGOCIO:
-1. Debit (Cargo) son Salidas (Gastos o Pagos). Credit (Abono) son Entradas.
-2. PRIMERO verifica si la descripción coincide con alguna REGLA APRENDIDA. Si coincide, usa esa cuenta.
-3. Palabras clave comunes:
-   - "Comision", "IVA", "Renta TPV", "Manejo" -> Comisiones Bancarias o Gastos Financieros
-   - "Nomina", "Payroll", "Sueldos" -> Nómina
-   - "SPEI", "Transferencia" -> Analizar contexto del concepto
-   - "UBER", "DIDI", "Gasolina" -> Gastos de Viaje o Transporte
-   - "Deposito", "Abono" -> Generalmente Ingresos
-   - "Pago", "Proveedor" -> Pagos a Proveedores
-4. Si la descripción es ambigua o no puedes determinar la cuenta, devuelve sap_code: null.
-5. Asigna confidence entre 0-100 basado en qué tan seguro estás.
+INSTRUCCIONES:
+1. MONTO negativo = CARGO (egreso), positivo = ABONO (ingreso)
+2. Busca en orden estricto:
+   a) ¿RFC coincide exacto? → Usa esa cuenta (conf: 95)
+   b) ¿KEYWORDS coinciden? → Usa esa cuenta (conf: 85)
+   c) ¿Solo TIPO_MOV coincide? → Usa cuenta genérica (conf: 70)
+3. Si no hay match, devuelve sap: null
 
-OUTPUT JSON (Array - solo el JSON, sin texto adicional):
-[
-  { "sequence": 1, "sap_code": "600-10", "confidence": 95 },
-  { "sequence": 2, "sap_code": null, "confidence": 0 }
-]
-
-Responde SOLO con el array JSON, sin explicaciones.
+RESPONDE solo JSON array minificado:
+[{"seq":1,"sap":"1010-000-000","conf":95},{"seq":2,"sap":null,"conf":0}]
 PROMPT;
+
+        // Log the prompt for debugging
+        Log::info('AI Pattern Matching Request', [
+            'transactions_count' => count($chunk),
+            'rules_count' => count($learningRules),
+            'prompt_length' => strlen($prompt),
+        ]);
+
+        // Save full prompt to file for debugging
+        file_put_contents(storage_path('logs/ai_prompt.txt'), $prompt);
 
         try {
             /** @var GeminiClient $gemini */
             $gemini = app('gemini');
             $result = $gemini->generativeModel('gemini-2.0-flash')->generateContent($prompt);
             $responseText = $result->text();
+
+            Log::info('AI Classification Response', [
+                'response_length' => strlen($responseText),
+                'response' => $responseText,
+            ]);
 
             // Extract JSON from response
             $responseText = trim($responseText);
@@ -229,10 +364,16 @@ PROMPT;
                 return $this->markChunkAsUnclassified($chunk);
             }
 
-            // Map AI results back to transactions
+            // Map AI results back to transactions (handle both old and new format)
             $aiResultsMap = [];
             foreach ($aiResults as $result) {
-                $aiResultsMap[$result['sequence']] = $result;
+                $seq = $result['seq'] ?? $result['sequence'] ?? null;
+                if ($seq !== null) {
+                    $aiResultsMap[$seq] = [
+                        'sap_code' => $result['sap'] ?? $result['sap_code'] ?? null,
+                        'confidence' => $result['conf'] ?? $result['confidence'] ?? 0,
+                    ];
+                }
             }
 
             $classified = [];

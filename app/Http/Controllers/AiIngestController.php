@@ -150,7 +150,7 @@ class AiIngestController extends Controller
             'transactions' => 'required|array|min:1',
             'transactions.*.sequence' => 'required|integer|min:1',
             'transactions.*.due_date' => 'required|date',
-            'transactions.*.memo' => 'required|string|max:255',
+            'transactions.*.memo' => 'required|string',
             'transactions.*.debit_amount' => 'nullable|numeric|min:0',
             'transactions.*.credit_amount' => 'nullable|numeric|min:0',
             'transactions.*.sap_account_code' => 'required|string|max:50',
@@ -266,10 +266,10 @@ class AiIngestController extends Controller
     public function saveRule(Request $request): JsonResponse
     {
         $request->validate([
-            'memo' => 'required|string|max:255',
+            'memo' => 'required|string',
             'sap_account_code' => 'required|string|max:50',
             'sap_account_name' => 'nullable|string|max:150',
-            'pattern' => 'nullable|string|max:100',
+            'pattern' => 'nullable|string',
         ]);
 
         $memo = $request->input('memo');
@@ -333,18 +333,18 @@ class AiIngestController extends Controller
 
     /**
      * Extract a meaningful pattern from a memo.
+     * Returns the full memo text to give AI maximum context.
      */
     protected function extractPattern(string $memo): ?string
     {
-        $cleaned = trim($memo);
+        // Normalize whitespace and clean up
+        $cleaned = trim(preg_replace('/\s+/', ' ', $memo));
 
         if (strlen($cleaned) < 3) {
             return null;
         }
 
-        // Take first 50 significant characters, uppercase
-        $pattern = substr($cleaned, 0, 50);
-
-        return strtoupper(trim($pattern));
+        // Return full memo in uppercase for consistent matching
+        return strtoupper($cleaned);
     }
 }

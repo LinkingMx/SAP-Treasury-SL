@@ -95,40 +95,20 @@ class LearnFromUserCorrections implements ShouldQueue
 
     /**
      * Extract a meaningful pattern from the memo.
+     * Returns the full memo text (cleaned) to give AI maximum context.
      */
     protected function extractPattern(string $memo): ?string
     {
-        // Clean up the memo
-        $cleaned = trim($memo);
+        // Clean up the memo - normalize whitespace
+        $cleaned = trim(preg_replace('/\s+/', ' ', $memo));
 
         // Skip if too short
         if (strlen($cleaned) < 5) {
             return null;
         }
 
-        // Common patterns to extract
-        $patterns = [
-            // SPEI patterns with entity name
-            '/^RASTREO\s+[A-Z0-9]+\s+.*?SPEI\s+(?:RECIBIDO|ENVIADO)\s+DE\s+[\d-]+\s+DE\s+(.+?)\s+(?:DE\s+LA\s+CTA|DE\s+LA\s+CLABE)/i',
-            // Common bank descriptions
-            '/^(COMISION|IVA|RENTA|COBRO|DEPOSITO|PAGO|NOMINA|TRANSFERENCIA)\s+(.+)$/i',
-            // Generic: take first significant words
-            '/^([A-Z0-9\s]{5,30})/i',
-        ];
-
-        foreach ($patterns as $pattern) {
-            if (preg_match($pattern, $cleaned, $matches)) {
-                $extracted = trim($matches[1] ?? $matches[0]);
-                if (strlen($extracted) >= 5 && strlen($extracted) <= 100) {
-                    return strtoupper($extracted);
-                }
-            }
-        }
-
-        // Fallback: use first 50 chars of cleaned memo
-        $fallback = substr($cleaned, 0, 50);
-
-        return strlen($fallback) >= 5 ? strtoupper($fallback) : null;
+        // Return full memo in uppercase for consistent matching
+        return strtoupper($cleaned);
     }
 
     /**

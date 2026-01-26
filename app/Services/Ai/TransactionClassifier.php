@@ -339,18 +339,33 @@ class TransactionClassifier
         // Get ALL learned rules
         $learningRules = $this->getAllLearningRulesForAi();
 
-        // If no rules exist, we can't do pattern matching
-        if (empty($learningRules)) {
-            Log::info('No learning rules available for AI pattern matching');
-
-            return $this->markChunkAsUnclassified($chunk);
-        }
-
         // Build rules list with pattern and account
         $rulesList = '';
         foreach ($learningRules as $i => $rule) {
             $pattern = substr($rule['pattern'], 0, 150);
             $rulesList .= sprintf("%d. [%s] %s\n", $i + 1, $rule['sap_code'], $pattern);
+        }
+
+        // Build context from transactions already classified by rules (same batch)
+        $ruleContextSection = '';
+        if (! empty($ruleClassified)) {
+            // Limit to 30 most relevant to avoid overloading the prompt
+            $limitedRuleClassified = array_slice($ruleClassified, 0, 30);
+            $contextList = '';
+            foreach ($limitedRuleClassified as $t) {
+                $memo = substr($t['raw_memo'] ?? $t['memo'] ?? '', 0, 80);
+                $code = $t['sap_account_code'] ?? '';
+                $name = $t['sap_account_name'] ?? '';
+                $contextList .= sprintf("- [%s] %s → %s\n", $code, $memo, $name);
+            }
+
+            $ruleContextSection = <<<CONTEXT
+
+TRANSACCIONES YA CLASIFICADAS POR REGLA (del mismo lote - referencia importante):
+{$contextList}
+INSTRUCCIÓN CRÍTICA: Si una transacción a clasificar tiene ESTRUCTURA SIMILAR a las anteriores
+(mismo prefijo como "RASTREO", "SPEI", etc., o mismo beneficiario/ordenante), asigna la MISMA cuenta con confidence 85-95.
+CONTEXT;
         }
 
         // Build transactions list with memo
@@ -361,11 +376,19 @@ class TransactionClassifier
             $transList .= sprintf("%d. [%s] %s\n", $t['sequence'], $type, $memo);
         }
 
+        // If no rules and no context, mark as unclassified
+        if (empty($learningRules) && empty($ruleClassified)) {
+            Log::info('No learning rules or context available for AI pattern matching');
+
+            return $this->markChunkAsUnclassified($chunk);
+        }
+
         $prompt = <<<PROMPT
 Eres un clasificador de transacciones bancarias. Tu tarea es asignar cuentas SAP basándote en la SIMILITUD entre los memos de las transacciones y los patrones de las reglas aprendidas.
 
 REGLAS APRENDIDAS (formato: [CUENTA_SAP] PATRON):
 {$rulesList}
+{$ruleContextSection}
 
 TRANSACCIONES A CLASIFICAR (formato: [TIPO] MEMO):
 {$transList}
@@ -375,7 +398,8 @@ INSTRUCCIONES:
 2. Busca SIMILITUD en el texto: mismas palabras clave, mismo tipo de operación, mismo beneficiario/pagador
 3. NO uses RFC como criterio - ignora los números de referencia y rastreo
 4. Si el memo es SIMILAR a un patrón (mismas palabras importantes), asigna esa cuenta
-5. Confianza: 90+ si muy similar, 70-89 si parcialmente similar, 0 si no hay match
+5. IMPORTANTE: Si hay transacciones ya clasificadas por regla del mismo lote, úsalas como referencia
+6. Confianza: 90+ si muy similar, 85-95 si similar a una ya clasificada, 70-89 si parcialmente similar, 0 si no hay match
 
 RESPONDE SOLO con JSON array (sin explicaciones):
 [{"seq":1,"sap":"1010-000-000","conf":90},{"seq":2,"sap":null,"conf":0}]
@@ -385,6 +409,7 @@ PROMPT;
         Log::info('AI Pattern Matching Request', [
             'transactions_count' => count($chunk),
             'rules_count' => count($learningRules),
+            'rule_context_count' => count($ruleClassified),
             'prompt_length' => strlen($prompt),
         ]);
 

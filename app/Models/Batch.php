@@ -22,6 +22,7 @@ class Batch extends Model
         'uuid',
         'branch_id',
         'bank_account_id',
+        'bank_id',
         'user_id',
         'filename',
         'total_records',
@@ -75,6 +76,14 @@ class Batch extends Model
     public function bankAccount(): BelongsTo
     {
         return $this->belongsTo(BankAccount::class);
+    }
+
+    /**
+     * Get the bank that owns the batch.
+     */
+    public function bank(): BelongsTo
+    {
+        return $this->belongsTo(Bank::class);
     }
 
     /**

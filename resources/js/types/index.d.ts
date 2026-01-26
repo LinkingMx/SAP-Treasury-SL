@@ -17,6 +17,63 @@ export interface BankAccount {
     account: string;
 }
 
+export interface Bank {
+    id: number;
+    name: string;
+}
+
+export interface ParseConfig {
+    bank_name_guess: string;
+    header_row_index: number;
+    data_start_row: number;
+    columns: {
+        date: { index: number; format: string };
+        description: { index: number };
+        debit: { index: number; is_signed: boolean } | null;
+        credit: { index: number; is_signed: boolean } | null;
+        signed_amount: { index: number } | null;
+    };
+}
+
+export interface SapAccount {
+    code: string;
+    name: string;
+}
+
+export interface ClassifiedTransaction {
+    sequence: number;
+    due_date: string;
+    memo: string;
+    debit_amount: number | null;
+    credit_amount: number | null;
+    sap_account_code: string | null;
+    sap_account_name: string | null;
+    confidence: number;
+    source: 'rule' | 'ai' | 'manual' | 'none' | 'error';
+    user_modified?: boolean;
+    ai_suggested_account?: string | null;
+}
+
+export interface ClassifyPreviewResponse {
+    success: boolean;
+    transactions: ClassifiedTransaction[];
+    summary: {
+        total_records: number;
+        total_debit: string;
+        total_credit: string;
+        unclassified_count: number;
+    };
+    chart_of_accounts: SapAccount[];
+}
+
+export interface AnalyzeStructureResponse {
+    success: boolean;
+    parse_config: ParseConfig;
+    bank_name_guess: string | null;
+    fingerprint: string;
+    is_cached: boolean;
+}
+
 export interface ImportError {
     row: number;
     error: string;

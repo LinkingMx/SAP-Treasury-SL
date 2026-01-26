@@ -204,4 +204,67 @@ class SapServiceLayer
     {
         return $this->sessionId !== null;
     }
+
+    /**
+     * Get the Chart of Accounts from SAP.
+     *
+     * @return array<int, array{code: string, name: string}>
+     */
+    public function getChartOfAccounts(): array
+    {
+        if (! $this->sessionId) {
+            Log::warning('Attempted to get Chart of Accounts without active session');
+
+            return [];
+        }
+
+        try {
+            $accounts = [];
+            $skip = 0;
+            $top = 500;
+
+            do {
+                $response = Http::withoutVerifying()
+                    ->withOptions(['verify' => false])
+                    ->timeout(120)
+                    ->withCookies(['B1SESSION' => $this->sessionId], parse_url($this->baseUrl, PHP_URL_HOST))
+                    ->get("{$this->baseUrl}/ChartOfAccounts", [
+                        '$select' => 'Code,Name',
+                        '$top' => $top,
+                        '$skip' => $skip,
+                    ]);
+
+                if (! $response->successful()) {
+                    Log::error('SAP ChartOfAccounts fetch failed', [
+                        'status' => $response->status(),
+                        'error' => $response->json('error.message.value', 'Unknown error'),
+                    ]);
+                    break;
+                }
+
+                $data = $response->json();
+                $items = $data['value'] ?? [];
+
+                foreach ($items as $item) {
+                    $accounts[] = [
+                        'code' => $item['Code'],
+                        'name' => $item['Name'],
+                    ];
+                }
+
+                $skip += $top;
+            } while (count($items) === $top);
+
+            Log::info('SAP ChartOfAccounts fetched', ['count' => count($accounts)]);
+
+            return $accounts;
+
+        } catch (ConnectionException $e) {
+            Log::error('SAP Connection failed during ChartOfAccounts fetch', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+    }
 }

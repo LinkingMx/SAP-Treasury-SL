@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\AfirmeController;
+use App\Http\Controllers\AiIngestController;
 use App\Http\Controllers\BatchController;
+use App\Models\Bank;
 use App\Models\BankAccount;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -20,6 +22,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             'branches' => auth()->user()->branches()->get(['branches.id', 'branches.name']),
             'bankAccounts' => BankAccount::whereIn('branch_id', $branchIds)
                 ->get(['id', 'branch_id', 'name', 'account']),
+            'banks' => Bank::orderBy('name')->get(['id', 'name']),
         ]);
     })->name('tesoreria');
 
@@ -31,6 +34,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('tesoreria/batches/{batch}/transactions/{transaction}/reprocess', [BatchController::class, 'reprocessTransaction'])->name('batches.reprocess-transaction');
     Route::post('tesoreria/batches/error-log', [BatchController::class, 'downloadErrorLog'])->name('batches.error-log');
     Route::get('tesoreria/template/download', [BatchController::class, 'downloadTemplate'])->name('batches.template');
+
+    // AI Intelligent Ingest
+    Route::prefix('tesoreria/ai')->name('ai.')->group(function () {
+        Route::post('analyze-structure', [AiIngestController::class, 'analyzeStructure'])->name('analyze-structure');
+        Route::post('classify-preview', [AiIngestController::class, 'classifyPreview'])->name('classify-preview');
+        Route::post('save-batch', [AiIngestController::class, 'saveBatch'])->name('save-batch');
+        Route::post('save-rule', [AiIngestController::class, 'saveRule'])->name('save-rule');
+        Route::get('banks', [AiIngestController::class, 'getBanks'])->name('banks');
+    });
 
     // Afirme Integration
     Route::get('afirme', [AfirmeController::class, 'index'])->name('afirme');

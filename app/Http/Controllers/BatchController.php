@@ -271,6 +271,29 @@ class BatchController extends Controller
         // Clear transaction error before retry
         $transaction->update(['error' => null]);
 
+        // Check if transaction is marked as "No enviar a SAP"
+        if ($transaction->counterpart_account === '__SKIP_SAP__') {
+            $transaction->update([
+                'sap_number' => 0,
+                'error' => null,
+            ]);
+
+            // Check if all transactions in the batch are processed
+            $unprocessedCount = $batch->transactions()->whereNull('sap_number')->count();
+            $batch->update([
+                'status' => $unprocessedCount === 0 ? BatchStatus::Completed : BatchStatus::Failed,
+                'error_message' => $unprocessedCount === 0 ? null : "{$unprocessedCount} transacciones sin procesar",
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Transacción marcada como omitida (no SAP)',
+                'sap_number' => 0,
+                'batch_status' => $batch->fresh()->status->value,
+                'batch_status_label' => $batch->fresh()->status->label(),
+            ]);
+        }
+
         // Login to SAP
         try {
             $loggedIn = $sap->login($branch->sap_database);

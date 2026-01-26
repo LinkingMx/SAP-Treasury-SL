@@ -38,11 +38,14 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
 import { tesoreria } from '@/routes';
 import { downloadTemplate } from '@/actions/App/Http/Controllers/BatchController';
+import AiIngest from '@/components/tesoreria/AiIngest';
 import {
+    type Bank,
     type BankAccount,
     type Batch,
     type BatchDetail,
@@ -56,6 +59,7 @@ import {
 import { Head } from '@inertiajs/react';
 import {
     AlertCircle,
+    Bot,
     CheckCircle2,
     ChevronLeft,
     ChevronRight,
@@ -81,11 +85,13 @@ const breadcrumbs: BreadcrumbItem[] = [
 interface Props {
     branches: Branch[];
     bankAccounts: BankAccount[];
+    banks: Bank[];
 }
 
 type UploadStatus = 'idle' | 'validating' | 'processing' | 'success' | 'error';
 
-export default function Tesoreria({ branches, bankAccounts }: Props) {
+export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
+    const [activeTab, setActiveTab] = useState<string>('quick');
     const [selectedBranch, setSelectedBranch] = useState<string>('');
     const [selectedBankAccount, setSelectedBankAccount] = useState<string>('');
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -490,9 +496,34 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="AC Tesorería" />
             <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                    <TabsList className="grid w-full grid-cols-2 max-w-md">
+                        <TabsTrigger value="quick" className="flex items-center gap-2">
+                            <FileSpreadsheet className="h-4 w-4" />
+                            Carga Rapida
+                        </TabsTrigger>
+                        <TabsTrigger value="ai" className="flex items-center gap-2">
+                            <Bot className="h-4 w-4" />
+                            Ingesta con IA
+                        </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="ai" className="mt-4">
+                        <AiIngest
+                            branches={branches}
+                            bankAccounts={bankAccounts}
+                            banks={banks}
+                            onBatchSaved={() => {
+                                setActiveTab('quick');
+                                fetchBatches(1);
+                            }}
+                        />
+                    </TabsContent>
+
+                    <TabsContent value="quick" className="mt-4 space-y-4">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Automatización de asientos contables</CardTitle>
+                        <CardTitle>Automatizacion de asientos contables</CardTitle>
                         <CardDescription>
                             Carga de asientos contables con contrapartidas para movimientos
                             bancarios desde Extractos bancarios
@@ -885,6 +916,8 @@ export default function Tesoreria({ branches, bankAccounts }: Props) {
                         )}
                     </CardContent>
                 </Card>
+                    </TabsContent>
+                </Tabs>
             </div>
 
             {/* Delete Confirmation Dialog */}

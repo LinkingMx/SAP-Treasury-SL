@@ -262,7 +262,7 @@ class AiIngestController extends Controller
 
     /**
      * Save a learning rule from a transaction classification.
-     * Uses AI to extract clean keywords from the memo.
+     * Uses AI to extract clean keywords and determines rule type (ACTOR/RFC/CONCEPTO).
      */
     public function saveRule(Request $request): JsonResponse
     {
@@ -289,12 +289,40 @@ class AiIngestController extends Controller
             ], 422);
         }
 
-        // Check if rule with same pattern already exists (update it)
-        $existingRule = LearningRule::where('pattern', $pattern)->first();
+        // Determine rule type and priority based on extracted data
+        $ruleType = LearningRule::TYPE_CONCEPTO;
+        $priority = LearningRule::PRIORITY_MEDIUM;
+        $actor = null;
+        $rfc = null;
+
+        if (! empty($extracted['rfc'])) {
+            $ruleType = LearningRule::TYPE_RFC;
+            $priority = LearningRule::PRIORITY_HIGH;
+            $rfc = strtoupper($extracted['rfc']);
+        } elseif (! empty($extracted['actor'])) {
+            $ruleType = LearningRule::TYPE_ACTOR;
+            $priority = LearningRule::PRIORITY_HIGH;
+            $actor = strtoupper($extracted['actor']);
+        }
+
+        // Check if rule with same identifiers already exists
+        $existingRule = null;
+        if ($rfc) {
+            $existingRule = LearningRule::where('rfc', $rfc)->first();
+        } elseif ($actor) {
+            $existingRule = LearningRule::where('actor', $actor)->first();
+        } else {
+            $existingRule = LearningRule::where('pattern', $pattern)->first();
+        }
 
         if ($existingRule) {
             // Update existing rule with new account
             $existingRule->update([
+                'pattern' => $pattern,
+                'actor' => $actor,
+                'rfc' => $rfc,
+                'rule_type' => $ruleType,
+                'priority' => $priority,
                 'sap_account_code' => $request->input('sap_account_code'),
                 'sap_account_name' => $request->input('sap_account_name'),
                 'confidence_score' => 100,
@@ -302,8 +330,10 @@ class AiIngestController extends Controller
             ]);
 
             Log::info('Learning rule updated', [
+                'rule_type' => $ruleType,
                 'pattern' => $pattern,
-                'extracted' => $extracted,
+                'actor' => $actor,
+                'rfc' => $rfc,
                 'old_account' => $existingRule->getOriginal('sap_account_code'),
                 'new_account' => $request->input('sap_account_code'),
             ]);
@@ -313,6 +343,7 @@ class AiIngestController extends Controller
                 'message' => 'Regla actualizada.',
                 'rule' => $existingRule->fresh(),
                 'extracted' => $extracted,
+                'rule_type' => $ruleType,
                 'is_new' => false,
             ]);
         }
@@ -320,7 +351,11 @@ class AiIngestController extends Controller
         // Create new rule
         $rule = LearningRule::create([
             'pattern' => $pattern,
+            'actor' => $actor,
+            'rfc' => $rfc,
             'match_type' => 'contains',
+            'rule_type' => $ruleType,
+            'priority' => $priority,
             'sap_account_code' => $request->input('sap_account_code'),
             'sap_account_name' => $request->input('sap_account_name'),
             'confidence_score' => 100,
@@ -328,8 +363,10 @@ class AiIngestController extends Controller
         ]);
 
         Log::info('Learning rule created', [
+            'rule_type' => $ruleType,
             'pattern' => $pattern,
-            'extracted' => $extracted,
+            'actor' => $actor,
+            'rfc' => $rfc,
             'account' => $request->input('sap_account_code'),
         ]);
 
@@ -338,6 +375,7 @@ class AiIngestController extends Controller
             'message' => 'Regla guardada exitosamente.',
             'rule' => $rule,
             'extracted' => $extracted,
+            'rule_type' => $ruleType,
             'is_new' => true,
         ]);
     }

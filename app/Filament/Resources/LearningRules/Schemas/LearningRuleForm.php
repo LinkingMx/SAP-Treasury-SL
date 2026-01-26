@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\LearningRules\Schemas;
 
+use App\Models\LearningRule;
 use App\Models\SapAccount;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -16,34 +17,68 @@ class LearningRuleForm
     {
         return $schema
             ->components([
-                Section::make('Patrón de Coincidencia')
-                    ->description('Define el texto que debe coincidir para aplicar esta regla')
+                Section::make('Tipo de Regla')
+                    ->description('Define cómo se identificará esta regla')
                     ->columnSpanFull()
                     ->schema([
-                        Textarea::make('pattern')
-                            ->label('Patrón')
-                            ->placeholder('Texto que debe coincidir con el memo de la transacción')
-                            ->required()
-                            ->rows(3)
-                            ->helperText('Este texto se comparará con el memo de las transacciones')
-                            ->columnSpanFull(),
-
-                        Select::make('match_type')
-                            ->label('Tipo de Coincidencia')
-                            ->prefixIcon('heroicon-o-magnifying-glass')
+                        Select::make('rule_type')
+                            ->label('Tipo de Regla')
+                            ->prefixIcon('heroicon-o-tag')
                             ->options([
-                                'contains' => 'Contiene - El memo contiene este patrón',
-                                'exact' => 'Exacto - El memo es exactamente igual',
+                                LearningRule::TYPE_RFC => 'RFC - Identifica por RFC del tercero',
+                                LearningRule::TYPE_ACTOR => 'Actor - Identifica por nombre del tercero',
+                                LearningRule::TYPE_CONCEPTO => 'Concepto - Identifica por tipo de operación',
                             ])
-                            ->default('contains')
+                            ->default(LearningRule::TYPE_CONCEPTO)
                             ->required()
-                            ->helperText('Selecciona cómo debe coincidir el patrón')
+                            ->live()
+                            ->helperText('El tipo determina la prioridad de matching'),
+
+                        Select::make('priority')
+                            ->label('Prioridad')
+                            ->prefixIcon('heroicon-o-arrow-trending-up')
+                            ->options([
+                                LearningRule::PRIORITY_HIGH => 'Alta (1) - Se evalúa primero',
+                                LearningRule::PRIORITY_MEDIUM => 'Media (2) - Evaluación estándar',
+                                LearningRule::PRIORITY_LOW => 'Baja (3) - Fallback',
+                            ])
+                            ->default(LearningRule::PRIORITY_MEDIUM)
+                            ->required(),
+                    ])
+                    ->columns(2),
+
+                Section::make('Identificadores')
+                    ->description('Datos específicos para el matching')
+                    ->columnSpanFull()
+                    ->schema([
+                        TextInput::make('rfc')
+                            ->label('RFC')
+                            ->prefixIcon('heroicon-o-identification')
+                            ->placeholder('ABC123456XYZ')
+                            ->maxLength(15)
+                            ->helperText('RFC del tercero (12-13 caracteres)')
+                            ->visible(fn ($get) => $get('rule_type') === LearningRule::TYPE_RFC),
+
+                        TextInput::make('actor')
+                            ->label('Actor/Tercero')
+                            ->prefixIcon('heroicon-o-building-office')
+                            ->placeholder('NOMBRE DE LA EMPRESA')
+                            ->maxLength(100)
+                            ->helperText('Nombre limpio del tercero (sin SA DE CV, etc.)')
+                            ->visible(fn ($get) => $get('rule_type') === LearningRule::TYPE_ACTOR),
+
+                        Textarea::make('pattern')
+                            ->label('Patrón/Keywords')
+                            ->placeholder('PALABRAS CLAVE, SEPARADAS POR COMA')
+                            ->required()
+                            ->rows(2)
+                            ->helperText('Keywords que identifican este tipo de transacción')
                             ->columnSpanFull(),
                     ])
-                    ->columns(1),
+                    ->columns(2),
 
                 Section::make('Cuenta SAP')
-                    ->description('Cuenta contable que se asignará cuando coincida el patrón')
+                    ->description('Cuenta contable que se asignará')
                     ->columnSpanFull()
                     ->schema([
                         Select::make('sap_account_code')
@@ -71,7 +106,6 @@ class LearningRuleForm
                                 }
                             })
                             ->live()
-                            ->helperText('La cuenta que se asignará automáticamente')
                             ->columnSpanFull(),
 
                         TextInput::make('sap_account_name')
@@ -85,34 +119,39 @@ class LearningRuleForm
                     ->columns(1),
 
                 Section::make('Configuración')
-                    ->description('Parámetros adicionales de la regla')
+                    ->description('Parámetros adicionales')
                     ->columnSpanFull()
                     ->schema([
                         TextInput::make('confidence_score')
-                            ->label('Puntuación de Confianza')
+                            ->label('Confianza')
                             ->prefixIcon('heroicon-o-chart-bar')
-                            ->placeholder('100')
                             ->numeric()
                             ->minValue(0)
                             ->maxValue(100)
                             ->default(100)
                             ->suffix('%')
-                            ->required()
-                            ->helperText('Qué tan confiable es esta regla (0-100)'),
+                            ->required(),
 
                         Select::make('source')
                             ->label('Origen')
                             ->prefixIcon('heroicon-o-information-circle')
                             ->options([
-                                'manual' => 'Manual',
                                 'user_correction' => 'Corrección de Usuario',
-                                'ai_learned' => 'Aprendida por IA',
+                                'ai_high_confidence' => 'IA Alta Confianza',
                             ])
-                            ->default('manual')
-                            ->required()
-                            ->helperText('Cómo se creó esta regla'),
+                            ->default('user_correction')
+                            ->required(),
+
+                        Select::make('match_type')
+                            ->label('Tipo Match')
+                            ->options([
+                                'contains' => 'Contiene',
+                                'exact' => 'Exacto',
+                            ])
+                            ->default('contains')
+                            ->required(),
                     ])
-                    ->columns(2),
+                    ->columns(3),
             ]);
     }
 }

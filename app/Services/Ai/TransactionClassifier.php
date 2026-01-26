@@ -15,50 +15,86 @@ class TransactionClassifier
     protected const CHUNK_SIZE = 200;
 
     /**
-     * Classify transactions using rules and optionally AI.
-     *
-     * @param  array<int, array{sequence: int, due_date: string, memo: string, debit_amount: float|null, credit_amount: float|null}>  $transactions
-     * @param  array<int, array{code: string, name: string}>  $chartOfAccounts
-     * @param  bool  $rulesOnly  If true, skip AI classification and only use rules
-     * @return array<int, array{sequence: int, due_date: string, memo: string, debit_amount: float|null, credit_amount: float|null, sap_account_code: string|null, sap_account_name: string|null, confidence: int, source: string}>
+     * Fallback accounts for unclassified transactions.
      */
-    public function classify(array $transactions, array $chartOfAccounts, bool $rulesOnly = false): array
+    protected const FALLBACK_INGRESO = '1050-002-000';
+
+    protected const FALLBACK_EGRESO = '1000-001-000';
+
+    /**
+     * Classify normalized transactions using hierarchical rules.
+     *
+     * @param  array<int, array>  $normalizedTransactions  Output from TransactionExtractor
+     * @param  array<int, array{code: string, name: string}>  $chartOfAccounts
+     * @param  bool  $rulesOnly  If true, skip AI classification
+     * @return array<int, array> Classified transactions
+     */
+    public function classifyNormalized(array $normalizedTransactions, array $chartOfAccounts, bool $rulesOnly = false): array
     {
         $classified = [];
         $unclassified = [];
 
-        // First pass: try to classify using rules
-        foreach ($transactions as $transaction) {
-            $ruleMatch = $this->classifyWithRules($transaction['memo']);
+        // First pass: Hierarchical rule matching
+        foreach ($normalizedTransactions as $tx) {
+            $match = LearningRule::findHierarchicalMatch(
+                $tx['rfc'],
+                $tx['actor'],
+                $tx['concept'],
+                $tx['clean_memo']
+            );
 
-            if ($ruleMatch) {
-                $classified[] = array_merge($transaction, [
-                    'sap_account_code' => $ruleMatch['code'],
-                    'sap_account_name' => $ruleMatch['name'],
-                    'confidence' => $ruleMatch['confidence'],
-                    'source' => 'rule',
+            if ($match['rule']) {
+                $classified[] = array_merge($tx, [
+                    'sap_account_code' => $match['rule']->sap_account_code,
+                    'sap_account_name' => $match['rule']->sap_account_name,
+                    'confidence' => $match['confidence'],
+                    'classification_level' => $match['level'],
+                    'source' => 'rule_L'.$match['level'],
                 ]);
             } else {
-                $unclassified[] = $transaction;
+                $unclassified[] = $tx;
             }
         }
 
-        // Second pass: classify remaining with AI (unless rulesOnly mode)
+        // Second pass: AI classification for remaining (if enabled)
         if (! empty($unclassified)) {
             if (! $rulesOnly && ! empty($chartOfAccounts)) {
-                // Get transactions classified by rules as context for AI
-                $ruleClassified = array_filter($classified, fn ($t) => $t['source'] === 'rule');
-                // Use AI classification with learned rules AND rule-classified transactions as context
-                $aiClassified = $this->classifyWithAi($unclassified, $chartOfAccounts, array_values($ruleClassified));
-                $classified = array_merge($classified, $aiClassified);
+                $aiClassified = $this->classifyWithAi(
+                    array_map(fn ($tx) => [
+                        'sequence' => $tx['sequence'],
+                        'due_date' => $tx['due_date'],
+                        'memo' => $tx['raw_memo'],
+                        'debit_amount' => $tx['debit_amount'],
+                        'credit_amount' => $tx['credit_amount'],
+                    ], $unclassified),
+                    $chartOfAccounts,
+                    $classified
+                );
+
+                // Merge AI results back with normalized data
+                foreach ($aiClassified as $aiTx) {
+                    $original = array_filter($unclassified, fn ($u) => $u['sequence'] === $aiTx['sequence']);
+                    $original = reset($original);
+                    if ($original) {
+                        $classified[] = array_merge($original, [
+                            'sap_account_code' => $aiTx['sap_account_code'],
+                            'sap_account_name' => $aiTx['sap_account_name'],
+                            'confidence' => $aiTx['confidence'],
+                            'classification_level' => 4,
+                            'source' => $aiTx['source'],
+                        ]);
+                    }
+                }
             } else {
-                // Rules only mode or no chart of accounts - mark as unclassified
-                foreach ($unclassified as $transaction) {
-                    $classified[] = array_merge($transaction, [
-                        'sap_account_code' => null,
-                        'sap_account_name' => null,
-                        'confidence' => 0,
-                        'source' => 'none',
+                // Apply fallback accounts based on movement type
+                foreach ($unclassified as $tx) {
+                    $fallbackAccount = $tx['type'] === 'ABONO' ? self::FALLBACK_INGRESO : self::FALLBACK_EGRESO;
+                    $classified[] = array_merge($tx, [
+                        'sap_account_code' => $fallbackAccount,
+                        'sap_account_name' => 'Por Identificar',
+                        'confidence' => 50,
+                        'classification_level' => 5,
+                        'source' => 'fallback',
                     ]);
                 }
             }
@@ -67,23 +103,58 @@ class TransactionClassifier
         // Sort by sequence
         usort($classified, fn ($a, $b) => $a['sequence'] <=> $b['sequence']);
 
+        Log::info('Classification complete', [
+            'total' => count($classified),
+            'by_level' => [
+                'L1_rfc_actor' => count(array_filter($classified, fn ($t) => ($t['classification_level'] ?? 0) === 1)),
+                'L2_concept' => count(array_filter($classified, fn ($t) => ($t['classification_level'] ?? 0) === 2)),
+                'L3_pattern' => count(array_filter($classified, fn ($t) => ($t['classification_level'] ?? 0) === 3)),
+                'L4_ai' => count(array_filter($classified, fn ($t) => ($t['classification_level'] ?? 0) === 4)),
+                'L5_fallback' => count(array_filter($classified, fn ($t) => ($t['classification_level'] ?? 0) === 5)),
+            ],
+        ]);
+
         return $classified;
     }
 
     /**
-     * Try to classify a transaction using learned rules.
+     * Legacy: Classify transactions using rules and optionally AI.
      *
-     * @return array{code: string, name: string|null, confidence: int}|null
+     * @param  array<int, array{sequence: int, due_date: string, memo: string, debit_amount: float|null, credit_amount: float|null}>  $transactions
+     * @param  array<int, array{code: string, name: string}>  $chartOfAccounts
+     * @param  bool  $rulesOnly  If true, skip AI classification and only use rules
+     * @return array<int, array{sequence: int, due_date: string, memo: string, debit_amount: float|null, credit_amount: float|null, sap_account_code: string|null, sap_account_name: string|null, confidence: int, source: string}>
+     */
+    public function classify(array $transactions, array $chartOfAccounts, bool $rulesOnly = false): array
+    {
+        // Use new pipeline: Extract then Classify
+        $extractor = new TransactionExtractor;
+        $normalized = $extractor->extract($transactions);
+
+        return $this->classifyNormalized($normalized, $chartOfAccounts, $rulesOnly);
+    }
+
+    /**
+     * Try to classify a transaction using hierarchical rules.
+     *
+     * @return array{code: string, name: string|null, confidence: int, level: int}|null
      */
     public function classifyWithRules(string $description): ?array
     {
-        $rule = LearningRule::findBestMatch($description);
+        // Quick extraction for single memo
+        $extractor = new TransactionExtractor;
+        $rfc = $extractor->extractRfc($description);
+        $actor = $extractor->extractActor($description, []);
+        $concept = $extractor->extractConcept($description);
 
-        if ($rule) {
+        $match = LearningRule::findHierarchicalMatch($rfc, $actor, $concept, $description);
+
+        if ($match['rule']) {
             return [
-                'code' => $rule->sap_account_code,
-                'name' => $rule->sap_account_name,
-                'confidence' => $rule->confidence_score,
+                'code' => $match['rule']->sap_account_code,
+                'name' => $match['rule']->sap_account_name,
+                'confidence' => $match['confidence'],
+                'level' => $match['level'],
             ];
         }
 

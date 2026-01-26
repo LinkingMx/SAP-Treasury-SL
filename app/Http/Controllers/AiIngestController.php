@@ -262,6 +262,7 @@ class AiIngestController extends Controller
 
     /**
      * Save a learning rule from a transaction classification.
+     * Uses AI to extract clean keywords from the memo.
      */
     public function saveRule(Request $request): JsonResponse
     {
@@ -269,11 +270,17 @@ class AiIngestController extends Controller
             'memo' => 'required|string',
             'sap_account_code' => 'required|string|max:50',
             'sap_account_name' => 'nullable|string|max:150',
-            'pattern' => 'nullable|string',
+            'debit_amount' => 'nullable|numeric',
+            'credit_amount' => 'nullable|numeric',
         ]);
 
         $memo = $request->input('memo');
-        $pattern = $request->input('pattern') ?: $this->extractPattern($memo);
+        $debitAmount = $request->input('debit_amount');
+        $creditAmount = $request->input('credit_amount');
+
+        // Use AI to extract clean pattern from memo
+        $extracted = $this->classifier->extractCleanPattern($memo, $debitAmount, $creditAmount);
+        $pattern = $extracted['keywords'];
 
         if (! $pattern || strlen($pattern) < 3) {
             return response()->json([
@@ -296,6 +303,7 @@ class AiIngestController extends Controller
 
             Log::info('Learning rule updated', [
                 'pattern' => $pattern,
+                'extracted' => $extracted,
                 'old_account' => $existingRule->getOriginal('sap_account_code'),
                 'new_account' => $request->input('sap_account_code'),
             ]);
@@ -304,6 +312,7 @@ class AiIngestController extends Controller
                 'success' => true,
                 'message' => 'Regla actualizada.',
                 'rule' => $existingRule->fresh(),
+                'extracted' => $extracted,
                 'is_new' => false,
             ]);
         }
@@ -320,6 +329,7 @@ class AiIngestController extends Controller
 
         Log::info('Learning rule created', [
             'pattern' => $pattern,
+            'extracted' => $extracted,
             'account' => $request->input('sap_account_code'),
         ]);
 
@@ -327,24 +337,8 @@ class AiIngestController extends Controller
             'success' => true,
             'message' => 'Regla guardada exitosamente.',
             'rule' => $rule,
+            'extracted' => $extracted,
             'is_new' => true,
         ]);
-    }
-
-    /**
-     * Extract a meaningful pattern from a memo.
-     * Returns the full memo text to give AI maximum context.
-     */
-    protected function extractPattern(string $memo): ?string
-    {
-        // Normalize whitespace and clean up
-        $cleaned = trim(preg_replace('/\s+/', ' ', $memo));
-
-        if (strlen($cleaned) < 3) {
-            return null;
-        }
-
-        // Return full memo in uppercase for consistent matching
-        return strtoupper($cleaned);
     }
 }

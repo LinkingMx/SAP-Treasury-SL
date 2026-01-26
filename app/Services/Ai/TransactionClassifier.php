@@ -498,4 +498,105 @@ PROMPT;
     {
         Cache::forget("sap_chart_of_accounts_{$companyDB}");
     }
+
+    /**
+     * Extract a clean pattern from a bank memo using AI.
+     * Removes noise (tracking numbers, dates, generic words) and keeps only identifying keywords.
+     *
+     * @return array{keywords: string, actor: string|null, rfc: string|null, tipo: string}
+     */
+    public function extractCleanPattern(string $memo, ?float $debitAmount = null, ?float $creditAmount = null): array
+    {
+        $movementType = ($debitAmount ?? 0) > 0 ? 'CARGO (Egreso)' : 'ABONO (Ingreso)';
+
+        $prompt = <<<PROMPT
+ROL: Eres un Ingeniero de Datos experto en limpieza de textos bancarios (SPEI México). Tu objetivo es extraer únicamente los datos constantes para crear una REGLA DE CLASIFICACIÓN.
+
+LISTA DE "RUIDO" A IGNORAR:
+- RASTREO, REFERENCIA, REF, HORA, FOLIO, CIE
+- "DATO NO VERIFICADO POR ESTA INSTITUCION"
+- "A LA CTA CLABE", "DE LA CTA CLABE"
+- "RFC ND" (Si es ND, ignóralo)
+- Números largos (más de 6 dígitos) que no sean RFCs
+- Palabras genéricas solas: TRANSFERENCIA, PAGO, SPEI, CONCEPTO
+
+LÓGICA DE EXTRACCIÓN:
+1. TIPO: Este movimiento es {$movementType}
+2. ACTOR: Busca el nombre del beneficiario/ordenante
+   - Si dice "ENVIADO A [BANCO] A [NOMBRE]", el actor es [NOMBRE]
+   - Si dice "RECIBIDO DE [BANCO] DE [NOMBRE]", el actor es [NOMBRE]
+3. RFC: Si hay RFC válido (3-4 letras + 6 números + 3 homoclave), extráelo
+4. LIMPIEZA: Elimina "SA DE CV", "SAPI DE CV", "SC", "S DE RL"
+5. KEYWORDS: Extrae palabras clave identificadoras (nombres comerciales, conceptos específicos)
+
+EJEMPLOS:
+Input: "RASTREO 1E04F968 SPEI RECIBIDO DE 40012-BBVA DE UBR PAGOS SA DE CV RFC UPA1808228K9 CONCEPTO UBER EATS"
+Output: {"keywords": "UBR PAGOS, UBER EATS", "actor": "UBR PAGOS", "rfc": "UPA1808228K9", "tipo": "ABONO"}
+
+Input: "PAGO NOMINA QUINCENA 15 ENERO 2025 FOLIO 123456"
+Output: {"keywords": "NOMINA, QUINCENA", "actor": null, "rfc": null, "tipo": "CARGO"}
+
+Input: "COMISION POR MANEJO DE CUENTA IVA INCLUIDO"
+Output: {"keywords": "COMISION, MANEJO DE CUENTA", "actor": null, "rfc": null, "tipo": "CARGO"}
+
+TEXTO A PROCESAR:
+"{$memo}"
+
+RESPONDE SOLO JSON (sin explicaciones):
+{"keywords": "PALABRA1, PALABRA2", "actor": "nombre o null", "rfc": "RFC o null", "tipo": "CARGO/ABONO"}
+PROMPT;
+
+        try {
+            /** @var GeminiClient $gemini */
+            $gemini = app('gemini');
+            $result = $gemini->generativeModel('gemini-2.0-flash')->generateContent($prompt);
+            $responseText = trim($result->text());
+
+            // Save for debugging
+            file_put_contents(storage_path('logs/ai_pattern_extraction.txt'), "MEMO:\n{$memo}\n\nRESPONSE:\n{$responseText}\n\n", FILE_APPEND);
+
+            // Clean JSON response
+            if (str_starts_with($responseText, '```json')) {
+                $responseText = substr($responseText, 7);
+            }
+            if (str_starts_with($responseText, '```')) {
+                $responseText = substr($responseText, 3);
+            }
+            if (str_ends_with($responseText, '```')) {
+                $responseText = substr($responseText, 0, -3);
+            }
+            $responseText = trim($responseText);
+
+            $extracted = json_decode($responseText, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && isset($extracted['keywords'])) {
+                Log::info('Pattern extracted with AI', [
+                    'memo' => substr($memo, 0, 100),
+                    'keywords' => $extracted['keywords'],
+                    'actor' => $extracted['actor'] ?? null,
+                    'rfc' => $extracted['rfc'] ?? null,
+                ]);
+
+                return [
+                    'keywords' => strtoupper($extracted['keywords'] ?? ''),
+                    'actor' => $extracted['actor'] ?? null,
+                    'rfc' => $extracted['rfc'] ?? null,
+                    'tipo' => $extracted['tipo'] ?? 'DESCONOCIDO',
+                ];
+            }
+        } catch (\Exception $e) {
+            Log::error('Failed to extract pattern with AI', [
+                'memo' => substr($memo, 0, 100),
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        // Fallback: return uppercase memo truncated
+        return [
+            'keywords' => strtoupper(substr($memo, 0, 100)),
+            'actor' => null,
+            'rfc' => null,
+            'tipo' => ($debitAmount ?? 0) > 0 ? 'CARGO' : 'ABONO',
+        ];
+    }
 }

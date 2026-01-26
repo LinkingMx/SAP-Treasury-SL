@@ -337,6 +337,9 @@ PROMPT;
             $result = $gemini->generativeModel('gemini-2.0-flash')->generateContent($prompt);
             $responseText = $result->text();
 
+            // Save AI response to file for debugging
+            file_put_contents(storage_path('logs/ai_response.txt'), $responseText);
+
             Log::info('AI Classification Response', [
                 'response_length' => strlen($responseText),
                 'response' => $responseText,

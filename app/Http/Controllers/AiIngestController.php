@@ -95,6 +95,7 @@ class AiIngestController extends Controller
 
             // Fetch chart of accounts from SAP
             $chartOfAccounts = $this->classifier->fetchChartOfAccounts($branch->sap_database);
+            $sapConnected = ! empty($chartOfAccounts);
 
             // Classify transactions (rules_only skips AI classification)
             $rulesOnly = $request->boolean('rules_only', false);
@@ -123,6 +124,8 @@ class AiIngestController extends Controller
                     'unclassified_count' => $unclassifiedCount,
                 ],
                 'chart_of_accounts' => $chartOfAccounts,
+                'sap_connected' => $sapConnected,
+                'sap_database' => $branch->sap_database,
             ]);
         } catch (\Exception $e) {
             Log::error('Classification preview failed', ['error' => $e->getMessage()]);

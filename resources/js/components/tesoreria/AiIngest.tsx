@@ -14,7 +14,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import AccountCombobox, { SKIP_SAP_CODE, SKIP_SAP_NAME } from '@/components/tesoreria/AccountCombobox';
+import AccountCombobox, { SKIP_SAP_CODE } from '@/components/tesoreria/AccountCombobox';
 import {
     Table,
     TableBody,
@@ -35,11 +35,13 @@ import {
 } from '@/types';
 import {
     AlertCircle,
+    AlertTriangle,
     ArrowDownCircle,
     ArrowUpCircle,
     Bot,
     Building2,
     CheckCircle2,
+    Circle,
     FileSpreadsheet,
     Filter,
     Hash,
@@ -57,6 +59,22 @@ import {
 } from 'lucide-react';
 
 type AiIngestStatus = 'idle' | 'analyzing' | 'classifying' | 'review' | 'saving' | 'complete' | 'error';
+
+type ProcessStepStatus = 'pending' | 'active' | 'complete' | 'error';
+
+interface ProcessStep {
+    id: string;
+    label: string;
+    status: ProcessStepStatus;
+}
+
+const INITIAL_STEPS: ProcessStep[] = [
+    { id: 'load', label: 'Cargando archivo', status: 'pending' },
+    { id: 'structure', label: 'Analizando estructura con IA', status: 'pending' },
+    { id: 'sap', label: 'Conectando a SAP', status: 'pending' },
+    { id: 'classify', label: 'Clasificando transacciones', status: 'pending' },
+    { id: 'preview', label: 'Preparando vista previa', status: 'pending' },
+];
 
 interface Props {
     branches: Branch[];
@@ -76,7 +94,6 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
     // Processing state
     const [status, setStatus] = useState<AiIngestStatus>('idle');
     const [progress, setProgress] = useState(0);
-    const [progressMessage, setProgressMessage] = useState<string>('');
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     // Data state
@@ -93,6 +110,12 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
     const [savedRules, setSavedRules] = useState<Set<number>>(new Set());
     const [savingRule, setSavingRule] = useState<number | null>(null);
     const [isReclassifying, setIsReclassifying] = useState(false);
+
+    // SAP connection state
+    const [sapConnected, setSapConnected] = useState<boolean>(true);
+
+    // Process steps state
+    const [steps, setSteps] = useState<ProcessStep[]>(INITIAL_STEPS);
 
     // Filter state
     const [searchQuery, setSearchQuery] = useState('');
@@ -171,6 +194,16 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
         }
     };
 
+    const updateStep = useCallback((index: number, status: ProcessStepStatus) => {
+        setSteps((prev) =>
+            prev.map((step, i) => (i === index ? { ...step, status } : step))
+        );
+    }, []);
+
+    const resetSteps = useCallback(() => {
+        setSteps(INITIAL_STEPS.map((step) => ({ ...step, status: 'pending' })));
+    }, []);
+
     const handleReset = () => {
         setStatus('idle');
         setProgress(0);
@@ -180,6 +213,8 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
         setTransactions([]);
         setChartOfAccounts([]);
         setSummary(null);
+        setSapConnected(true);
+        resetSteps();
         handleClearFile();
     };
 
@@ -187,17 +222,22 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
         if (!selectedFile || !selectedBranch || !selectedBankAccount) return;
 
         setStatus('analyzing');
-        setProgress(10);
-        setProgressMessage('Cargando archivo Excel...');
+        setProgress(5);
         setErrorMessage(null);
+        resetSteps();
 
         try {
-            // Step 1: Analyze structure
-            setProgressMessage('Analizando estructura del archivo con IA...');
-            setProgress(20);
+            // Step 1: Load file
+            updateStep(0, 'active');
+            setProgress(10);
 
             const analyzeFormData = new FormData();
             analyzeFormData.append('file', selectedFile);
+
+            // Step 2: Analyze structure
+            updateStep(0, 'complete');
+            updateStep(1, 'active');
+            setProgress(25);
 
             const analyzeResponse = await fetch('/tesoreria/ai/analyze-structure', {
                 method: 'POST',
@@ -216,20 +256,22 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
 
             setParseConfig(analyzeData.parse_config);
             setBankNameGuess(analyzeData.bank_name_guess);
-            setProgress(40);
 
-            // Step 2: Classify transactions
+            // Step 3: Connect to SAP
+            updateStep(1, 'complete');
+            updateStep(2, 'active');
             setStatus('classifying');
-            setProgressMessage('Extrayendo catalogo de cuentas de SAP...');
-            setProgress(50);
+            setProgress(45);
 
             const classifyFormData = new FormData();
             classifyFormData.append('file', selectedFile);
             classifyFormData.append('parse_config', JSON.stringify(analyzeData.parse_config));
             classifyFormData.append('branch_id', selectedBranch);
 
-            setProgressMessage('Clasificando transacciones con IA...');
-            setProgress(70);
+            // Step 4: Classify transactions
+            updateStep(2, 'complete');
+            updateStep(3, 'active');
+            setProgress(65);
 
             const classifyResponse = await fetch('/tesoreria/ai/classify-preview', {
                 method: 'POST',
@@ -246,7 +288,13 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
                 throw new Error(classifyData.message || 'Error al clasificar las transacciones.');
             }
 
-            setProgressMessage('Preparando vista previa...');
+            // Update SAP connection status and step indicator
+            setSapConnected(classifyData.sap_connected);
+            updateStep(2, classifyData.sap_connected ? 'complete' : 'error');
+
+            // Step 5: Prepare preview
+            updateStep(3, 'complete');
+            updateStep(4, 'active');
             setProgress(90);
 
             setTransactions(classifyData.transactions.map(t => ({
@@ -256,14 +304,15 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
             })));
             setChartOfAccounts(classifyData.chart_of_accounts);
             setSummary(classifyData.summary);
+
+            // Complete
+            updateStep(4, 'complete');
             setProgress(100);
-            setProgressMessage('Completado');
             setStatus('review');
 
         } catch (error) {
             console.error('Process error:', error);
             setErrorMessage(error instanceof Error ? error.message : 'Error desconocido.');
-            setProgressMessage('');
             setStatus('error');
         }
     };
@@ -424,10 +473,22 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
     };
 
     const getConfidenceBadge = (confidence: number, source: string, accountCode: string | null) => {
+        // Check if account exists in the loaded catalog
+        const accountInCatalog = accountCode && chartOfAccounts.some((a) => a.code === accountCode);
+
         if (accountCode === SKIP_SAP_CODE) {
             return <Badge variant="outline" className="text-amber-500 border-amber-500">Omitir</Badge>;
         }
         if (source === 'rule') {
+            // Rule found but account not verified in SAP catalog
+            if (!accountInCatalog && accountCode) {
+                return (
+                    <Badge variant="secondary" className="bg-amber-600 text-white">
+                        <AlertTriangle className="mr-1 h-3 w-3" />
+                        Regla
+                    </Badge>
+                );
+            }
             return <Badge variant="default" className="bg-green-600">Regla ({confidence}%)</Badge>;
         }
         if (confidence >= 90) {
@@ -537,6 +598,18 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
                         </div>
                     </div>
                 </div>
+
+                {/* SAP connection warning */}
+                {!sapConnected && (
+                    <Alert className="border-amber-500 bg-amber-500/10">
+                        <AlertTriangle className="h-4 w-4 text-amber-500" />
+                        <AlertTitle className="text-amber-500">Conexion a SAP no disponible</AlertTitle>
+                        <AlertDescription>
+                            No se pudo conectar a la base de datos SAP para obtener el catalogo de cuentas.
+                            Las cuentas de las reglas aprendidas se muestran pero deben verificarse manualmente.
+                        </AlertDescription>
+                    </Alert>
+                )}
 
                 {/* Error message */}
                 {errorMessage && (
@@ -726,18 +799,44 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
         return (
             <Card>
                 <CardContent className="pt-6">
-                    <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                    <div className="flex flex-col items-center justify-center py-8 space-y-6">
                         <div className="relative">
                             <Sparkles className="h-12 w-12 text-primary animate-pulse" />
                         </div>
-                        <div className="text-center">
-                            <h3 className="text-lg font-semibold">
-                                Procesando archivo...
-                            </h3>
-                            <p className="text-muted-foreground">
-                                {progressMessage}
-                            </p>
+                        <h3 className="text-lg font-semibold">Procesando archivo...</h3>
+
+                        {/* Steps indicator */}
+                        <div className="w-full max-w-sm space-y-3">
+                            {steps.map((step) => (
+                                <div key={step.id} className="flex items-center gap-3">
+                                    {step.status === 'complete' && (
+                                        <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+                                    )}
+                                    {step.status === 'active' && (
+                                        <Loader2 className="h-5 w-5 text-primary animate-spin shrink-0" />
+                                    )}
+                                    {step.status === 'error' && (
+                                        <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+                                    )}
+                                    {step.status === 'pending' && (
+                                        <Circle className="h-5 w-5 text-muted-foreground/50 shrink-0" />
+                                    )}
+                                    <span
+                                        className={cn(
+                                            'text-sm',
+                                            step.status === 'active' && 'font-medium text-foreground',
+                                            step.status === 'complete' && 'text-muted-foreground',
+                                            step.status === 'error' && 'text-amber-500',
+                                            step.status === 'pending' && 'text-muted-foreground/50'
+                                        )}
+                                    >
+                                        {step.label}
+                                        {step.status === 'error' && ' (no disponible)'}
+                                    </span>
+                                </div>
+                            ))}
                         </div>
+
                         <Progress value={progress} className="w-64" />
                         <p className="text-sm text-muted-foreground">{progress}%</p>
                     </div>

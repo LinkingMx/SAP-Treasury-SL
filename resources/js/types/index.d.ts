@@ -64,6 +64,8 @@ export interface ClassifyPreviewResponse {
         unclassified_count: number;
     };
     chart_of_accounts: SapAccount[];
+    sap_connected: boolean;
+    sap_database: string;
 }
 
 export interface AnalyzeStructureResponse {

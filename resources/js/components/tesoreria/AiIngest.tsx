@@ -76,6 +76,8 @@ const INITIAL_STEPS: ProcessStep[] = [
     { id: 'preview', label: 'Preparando vista previa', status: 'pending' },
 ];
 
+const STEP_DELAY_MS = 600;
+
 interface Props {
     branches: Branch[];
     bankAccounts: BankAccount[];
@@ -204,6 +206,8 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
         setSteps(INITIAL_STEPS.map((step) => ({ ...step, status: 'pending' })));
     }, []);
 
+    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
     const handleReset = () => {
         setStatus('idle');
         setProgress(0);
@@ -230,6 +234,7 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
             // Step 1: Load file
             updateStep(0, 'active');
             setProgress(10);
+            await delay(STEP_DELAY_MS);
 
             const analyzeFormData = new FormData();
             analyzeFormData.append('file', selectedFile);
@@ -256,6 +261,7 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
 
             setParseConfig(analyzeData.parse_config);
             setBankNameGuess(analyzeData.bank_name_guess);
+            await delay(STEP_DELAY_MS);
 
             // Step 3: Connect to SAP
             updateStep(1, 'complete');
@@ -267,11 +273,6 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
             classifyFormData.append('file', selectedFile);
             classifyFormData.append('parse_config', JSON.stringify(analyzeData.parse_config));
             classifyFormData.append('branch_id', selectedBranch);
-
-            // Step 4: Classify transactions
-            updateStep(2, 'complete');
-            updateStep(3, 'active');
-            setProgress(65);
 
             const classifyResponse = await fetch('/tesoreria/ai/classify-preview', {
                 method: 'POST',
@@ -291,6 +292,12 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
             // Update SAP connection status and step indicator
             setSapConnected(classifyData.sap_connected);
             updateStep(2, classifyData.sap_connected ? 'complete' : 'error');
+            await delay(STEP_DELAY_MS);
+
+            // Step 4: Classify transactions
+            updateStep(3, 'active');
+            setProgress(65);
+            await delay(STEP_DELAY_MS);
 
             // Step 5: Prepare preview
             updateStep(3, 'complete');
@@ -304,10 +311,12 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
             })));
             setChartOfAccounts(classifyData.chart_of_accounts);
             setSummary(classifyData.summary);
+            await delay(STEP_DELAY_MS);
 
             // Complete
             updateStep(4, 'complete');
             setProgress(100);
+            await delay(STEP_DELAY_MS / 2);
             setStatus('review');
 
         } catch (error) {

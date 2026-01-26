@@ -1,30 +1,32 @@
 <?php
 
-namespace App\Filament\Resources\LearningRules\Forms;
+namespace App\Filament\Resources\LearningRules\Schemas;
 
 use App\Models\SapAccount;
-use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Form;
 use Filament\Forms\Set;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
 
 class LearningRuleForm
 {
-    public static function configure(Form $form): Form
+    public static function configure(Schema $schema): Schema
     {
-        return $form
-            ->schema([
+        return $schema
+            ->components([
                 Section::make('Patrón de Coincidencia')
                     ->description('Define el texto que debe coincidir para aplicar esta regla')
+                    ->columnSpanFull()
                     ->schema([
                         Textarea::make('pattern')
                             ->label('Patrón')
                             ->placeholder('Texto que debe coincidir con el memo de la transacción')
                             ->required()
                             ->rows(3)
-                            ->helperText('Este texto se comparará con el memo de las transacciones'),
+                            ->helperText('Este texto se comparará con el memo de las transacciones')
+                            ->columnSpanFull(),
 
                         Select::make('match_type')
                             ->label('Tipo de Coincidencia')
@@ -35,12 +37,14 @@ class LearningRuleForm
                             ])
                             ->default('contains')
                             ->required()
-                            ->helperText('Selecciona cómo debe coincidir el patrón'),
+                            ->helperText('Selecciona cómo debe coincidir el patrón')
+                            ->columnSpanFull(),
                     ])
                     ->columns(1),
 
                 Section::make('Cuenta SAP')
                     ->description('Cuenta contable que se asignará cuando coincida el patrón')
+                    ->columnSpanFull()
                     ->schema([
                         Select::make('sap_account_code')
                             ->label('Cuenta SAP')
@@ -67,19 +71,22 @@ class LearningRuleForm
                                 }
                             })
                             ->live()
-                            ->helperText('La cuenta que se asignará automáticamente'),
+                            ->helperText('La cuenta que se asignará automáticamente')
+                            ->columnSpanFull(),
 
                         TextInput::make('sap_account_name')
                             ->label('Nombre de la Cuenta')
                             ->prefixIcon('heroicon-o-tag')
                             ->placeholder('Se llenará automáticamente')
                             ->disabled()
-                            ->dehydrated(),
+                            ->dehydrated()
+                            ->columnSpanFull(),
                     ])
                     ->columns(1),
 
                 Section::make('Configuración')
                     ->description('Parámetros adicionales de la regla')
+                    ->columnSpanFull()
                     ->schema([
                         TextInput::make('confidence_score')
                             ->label('Puntuación de Confianza')

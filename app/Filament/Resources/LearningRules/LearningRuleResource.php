@@ -2,15 +2,15 @@
 
 namespace App\Filament\Resources\LearningRules;
 
-use App\Filament\Resources\LearningRules\Forms\LearningRuleForm;
 use App\Filament\Resources\LearningRules\Pages\CreateLearningRule;
 use App\Filament\Resources\LearningRules\Pages\EditLearningRule;
 use App\Filament\Resources\LearningRules\Pages\ListLearningRules;
+use App\Filament\Resources\LearningRules\Schemas\LearningRuleForm;
 use App\Filament\Resources\LearningRules\Tables\LearningRulesTable;
 use App\Models\LearningRule;
 use BackedEnum;
-use Filament\Forms\Form;
 use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
 use Filament\Tables\Table;
 use UnitEnum;
 
@@ -30,9 +30,9 @@ class LearningRuleResource extends Resource
 
     protected static ?int $navigationSort = 1;
 
-    public static function form(Form $form): Form
+    public static function form(Schema $schema): Schema
     {
-        return LearningRuleForm::configure($form);
+        return LearningRuleForm::configure($schema);
     }
 
     public static function table(Table $table): Table

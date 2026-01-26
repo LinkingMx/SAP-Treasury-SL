@@ -294,39 +294,48 @@ PROMPT;
     {
         $cacheKey = "sap_chart_of_accounts_{$companyDB}";
 
-        return Cache::remember($cacheKey, 3600, function () use ($companyDB) {
-            try {
-                // Configure database connection for the specific SAP company
-                config(['database.connections.sap_sqlsrv.database' => $companyDB]);
-                DB::purge('sap_sqlsrv');
+        // Check if we have a valid cached result
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached) && ! empty($cached)) {
+            return $cached;
+        }
 
-                // Query chart of accounts directly from SAP database
-                $accounts = DB::connection('sap_sqlsrv')
-                    ->table('OACT')
-                    ->select(['AcctCode as code', 'AcctName as name'])
-                    ->orderBy('AcctCode')
-                    ->get()
-                    ->map(fn ($item) => [
-                        'code' => $item->code,
-                        'name' => $item->name,
-                    ])
-                    ->toArray();
+        try {
+            // Configure database connection for the specific SAP company
+            config(['database.connections.sap_sqlsrv.database' => $companyDB]);
+            DB::purge('sap_sqlsrv');
 
-                Log::info('Chart of accounts fetched via SQL', [
-                    'companyDB' => $companyDB,
-                    'count' => count($accounts),
-                ]);
+            // Query chart of accounts directly from SAP database
+            $accounts = DB::connection('sap_sqlsrv')
+                ->table('OACT')
+                ->select(['AcctCode as code', 'AcctName as name'])
+                ->orderBy('AcctCode')
+                ->get()
+                ->map(fn ($item) => [
+                    'code' => $item->code,
+                    'name' => $item->name,
+                ])
+                ->toArray();
 
-                return $accounts;
-            } catch (\Exception $e) {
-                Log::error('Failed to fetch chart of accounts from SAP SQL', [
-                    'companyDB' => $companyDB,
-                    'error' => $e->getMessage(),
-                ]);
+            Log::info('Chart of accounts fetched via SQL', [
+                'companyDB' => $companyDB,
+                'count' => count($accounts),
+            ]);
 
-                return [];
+            // Only cache if we got valid results
+            if (! empty($accounts)) {
+                Cache::put($cacheKey, $accounts, 3600);
             }
-        });
+
+            return $accounts;
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch chart of accounts from SAP SQL', [
+                'companyDB' => $companyDB,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
     }
 
     /**

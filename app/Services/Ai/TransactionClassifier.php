@@ -49,7 +49,7 @@ class TransactionClassifier
                     'sap_account_name' => $match['rule']->sap_account_name,
                     'confidence' => $match['confidence'],
                     'classification_level' => $match['level'],
-                    'source' => 'rule_L'.$match['level'],
+                    'source' => 'rule', // Frontend expects 'rule', not 'rule_L1'
                 ]);
             } else {
                 $unclassified[] = $tx;

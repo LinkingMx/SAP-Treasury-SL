@@ -100,6 +100,7 @@ class TransactionExtractor
             $normalized[] = [
                 'sequence' => $tx['sequence'],
                 'due_date' => $tx['due_date'],
+                'memo' => $tx['memo'], // Keep 'memo' for frontend compatibility
                 'raw_memo' => $tx['memo'],
                 'clean_memo' => $cleanedMemo,
                 'actor' => $actor,

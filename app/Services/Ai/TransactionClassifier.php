@@ -247,6 +247,16 @@ class TransactionClassifier
     }
 
     /**
+     * Get account name from learning rules by account code.
+     */
+    protected function getAccountNameFromRules(string $code): ?string
+    {
+        $rule = LearningRule::where('sap_account_code', $code)->first();
+
+        return $rule?->sap_account_name;
+    }
+
+    /**
      * Extract keywords from a bank memo for matching.
      */
     protected function extractKeywords(string $memo): array
@@ -469,20 +479,21 @@ PROMPT;
             $classified = [];
             foreach ($chunk as $transaction) {
                 $aiResult = $aiResultsMap[$transaction['sequence']] ?? null;
-
-                // Validate that the suggested account exists in the chart of accounts
                 $suggestedCode = $aiResult['sap_code'] ?? null;
-                $accountExists = $suggestedCode && isset($accountMap[$suggestedCode]);
+                $confidence = $aiResult['confidence'] ?? 0;
 
-                if ($aiResult && $accountExists) {
+                if ($suggestedCode && $confidence > 0) {
+                    // AI classified - get account name from accountMap or from learning rules
+                    $accountName = $accountMap[$suggestedCode] ?? $this->getAccountNameFromRules($suggestedCode);
+
                     $classified[] = array_merge($transaction, [
                         'sap_account_code' => $suggestedCode,
-                        'sap_account_name' => $accountMap[$suggestedCode],
-                        'confidence' => $aiResult['confidence'] ?? 80,
+                        'sap_account_name' => $accountName,
+                        'confidence' => $confidence,
                         'source' => 'ai',
                     ]);
                 } else {
-                    // Account doesn't exist or AI couldn't classify - mark as unclassified
+                    // AI couldn't classify - mark as unclassified
                     $classified[] = array_merge($transaction, [
                         'sap_account_code' => null,
                         'sap_account_name' => null,

@@ -327,7 +327,7 @@ class TransactionClassifier
     }
 
     /**
-     * Classify a chunk of transactions with AI using similarity matching against learned rules.
+     * Classify a chunk of transactions with AI using chart of accounts and learned rules.
      *
      * @param  array<int, array>  $chunk
      * @param  array<int, array{code: string, name: string}>  $chartOfAccounts
@@ -336,14 +336,26 @@ class TransactionClassifier
      */
     protected function classifyChunkWithAi(array $chunk, array $chartOfAccounts, array $accountMap, array $ruleClassified = []): array
     {
-        // Get ALL learned rules
-        $learningRules = $this->getAllLearningRulesForAi();
+        // Build chart of accounts section (always available)
+        $accountsList = '';
+        foreach (array_slice($chartOfAccounts, 0, 100) as $account) {
+            $accountsList .= sprintf("[%s] %s\n", $account['code'], $account['name']);
+        }
 
-        // Build rules list with pattern and account
-        $rulesList = '';
-        foreach ($learningRules as $i => $rule) {
-            $pattern = substr($rule['pattern'], 0, 150);
-            $rulesList .= sprintf("%d. [%s] %s\n", $i + 1, $rule['sap_code'], $pattern);
+        // Get learned rules if available
+        $learningRules = $this->getAllLearningRulesForAi();
+        $rulesSection = '';
+        if (! empty($learningRules)) {
+            $rulesList = '';
+            foreach ($learningRules as $i => $rule) {
+                $pattern = substr($rule['pattern'], 0, 150);
+                $rulesList .= sprintf("%d. [%s] %s\n", $i + 1, $rule['sap_code'], $pattern);
+            }
+            $rulesSection = <<<RULES
+
+REGLAS APRENDIDAS (prioridad alta - usa estas primero):
+{$rulesList}
+RULES;
         }
 
         // Build context from transactions already classified by rules (same batch)
@@ -361,10 +373,9 @@ class TransactionClassifier
 
             $ruleContextSection = <<<CONTEXT
 
-TRANSACCIONES YA CLASIFICADAS POR REGLA (del mismo lote - referencia importante):
+TRANSACCIONES YA CLASIFICADAS (del mismo lote - referencia importante):
 {$contextList}
-INSTRUCCIÓN CRÍTICA: Si una transacción a clasificar tiene ESTRUCTURA SIMILAR a las anteriores
-(mismo prefijo como "RASTREO", "SPEI", etc., o mismo beneficiario/ordenante), asigna la MISMA cuenta con confidence 85-95.
+INSTRUCCIÓN: Si una transacción tiene ESTRUCTURA SIMILAR a las anteriores, asigna la MISMA cuenta con confidence 85-95.
 CONTEXT;
         }
 
@@ -376,30 +387,24 @@ CONTEXT;
             $transList .= sprintf("%d. [%s] %s\n", $t['sequence'], $type, $memo);
         }
 
-        // If no rules and no context, mark as unclassified
-        if (empty($learningRules) && empty($ruleClassified)) {
-            Log::info('No learning rules or context available for AI pattern matching');
-
-            return $this->markChunkAsUnclassified($chunk);
-        }
-
         $prompt = <<<PROMPT
-Eres un clasificador de transacciones bancarias. Tu tarea es asignar cuentas SAP basándote en la SIMILITUD entre los memos de las transacciones y los patrones de las reglas aprendidas.
+Eres un Contador Senior experto en clasificación de transacciones bancarias mexicanas.
 
-REGLAS APRENDIDAS (formato: [CUENTA_SAP] PATRON):
-{$rulesList}
+CATÁLOGO DE CUENTAS SAP DISPONIBLES:
+{$accountsList}
+{$rulesSection}
 {$ruleContextSection}
 
-TRANSACCIONES A CLASIFICAR (formato: [TIPO] MEMO):
+TRANSACCIONES A CLASIFICAR (formato: SEQ. [TIPO] MEMO):
 {$transList}
 
 INSTRUCCIONES:
-1. Compara cada memo de transacción con los patrones de las reglas
-2. Busca SIMILITUD en el texto: mismas palabras clave, mismo tipo de operación, mismo beneficiario/pagador
-3. NO uses RFC como criterio - ignora los números de referencia y rastreo
-4. Si el memo es SIMILAR a un patrón (mismas palabras importantes), asigna esa cuenta
-5. IMPORTANTE: Si hay transacciones ya clasificadas por regla del mismo lote, úsalas como referencia
-6. Confianza: 90+ si muy similar, 85-95 si similar a una ya clasificada, 70-89 si parcialmente similar, 0 si no hay match
+1. Analiza cada transacción y asigna la cuenta SAP más apropiada del catálogo
+2. Identifica palabras clave: SPEI, DEPOSITO, COMISION, NOMINA, RENTA, TPV, etc.
+3. Para ABONOS (ingresos): busca cuentas de ingresos o bancos
+4. Para CARGOS (egresos): busca cuentas de gastos o proveedores
+5. Ignora números de rastreo, referencias y fechas - enfócate en el concepto
+6. Confianza: 90+ muy seguro, 70-89 probable, <70 o null si no hay match claro
 
 RESPONDE SOLO con JSON array (sin explicaciones):
 [{"seq":1,"sap":"1010-000-000","conf":90},{"seq":2,"sap":null,"conf":0}]

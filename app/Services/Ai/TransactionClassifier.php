@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Log;
 
 class TransactionClassifier
 {
-    protected const CHUNK_SIZE = 200;
+    protected const CHUNK_SIZE = 50; // Reduced to avoid API timeout
 
     /**
      * Fallback accounts for unclassified transactions.

@@ -327,7 +327,7 @@ class TransactionClassifier
     }
 
     /**
-     * Classify a chunk of transactions with AI using chart of accounts and learned rules.
+     * Classify a chunk of transactions with AI using ONLY learned rules.
      *
      * @param  array<int, array>  $chunk
      * @param  array<int, array{code: string, name: string}>  $chartOfAccounts
@@ -336,50 +336,46 @@ class TransactionClassifier
      */
     protected function classifyChunkWithAi(array $chunk, array $chartOfAccounts, array $accountMap, array $ruleClassified = []): array
     {
-        // Build chart of accounts section (always available)
-        $accountsList = '';
-        foreach (array_slice($chartOfAccounts, 0, 100) as $account) {
-            $accountsList .= sprintf("[%s] %s\n", $account['code'], $account['name']);
-        }
-
-        // Get learned rules if available
+        // Get learned rules - these are the ONLY source for AI classification
         $learningRules = $this->getAllLearningRulesForAi();
-        $rulesSection = '';
-        if (! empty($learningRules)) {
-            $rulesList = '';
-            foreach ($learningRules as $i => $rule) {
-                $pattern = substr($rule['pattern'], 0, 150);
-                $rulesList .= sprintf("%d. [%s] %s\n", $i + 1, $rule['sap_code'], $pattern);
-            }
-            $rulesSection = <<<RULES
 
-REGLAS APRENDIDAS (prioridad alta - usa estas primero):
-{$rulesList}
-RULES;
+        // If no rules exist, return all as unclassified (AI cannot guess without rules)
+        if (empty($learningRules) && empty($ruleClassified)) {
+            Log::info('No learning rules available - marking chunk as unclassified', [
+                'chunk_size' => count($chunk),
+            ]);
+
+            return $this->markChunkAsUnclassified($chunk);
         }
 
-        // Build context from transactions already classified by rules (same batch)
-        $ruleContextSection = '';
+        // Build rules list with pattern and account
+        $rulesList = '';
+        foreach ($learningRules as $i => $rule) {
+            $pattern = substr($rule['pattern'], 0, 150);
+            $rulesList .= sprintf("%d. [%s] %s\n", $i + 1, $rule['sap_code'], $pattern);
+        }
+
+        // Build context from transactions already classified (same batch)
+        $contextSection = '';
         if (! empty($ruleClassified)) {
-            // Limit to 30 most relevant to avoid overloading the prompt
-            $limitedRuleClassified = array_slice($ruleClassified, 0, 30);
+            $limitedContext = array_slice($ruleClassified, 0, 30);
             $contextList = '';
-            foreach ($limitedRuleClassified as $t) {
+            foreach ($limitedContext as $t) {
                 $memo = substr($t['raw_memo'] ?? $t['memo'] ?? '', 0, 80);
                 $code = $t['sap_account_code'] ?? '';
                 $name = $t['sap_account_name'] ?? '';
                 $contextList .= sprintf("- [%s] %s → %s\n", $code, $memo, $name);
             }
 
-            $ruleContextSection = <<<CONTEXT
+            $contextSection = <<<CONTEXT
 
-TRANSACCIONES YA CLASIFICADAS (del mismo lote - referencia importante):
+TRANSACCIONES YA CLASIFICADAS EN ESTE LOTE (usa como referencia):
 {$contextList}
-INSTRUCCIÓN: Si una transacción tiene ESTRUCTURA SIMILAR a las anteriores, asigna la MISMA cuenta con confidence 85-95.
+IMPORTANTE: Si una transacción tiene estructura SIMILAR (mismo prefijo, mismo beneficiario), asigna la MISMA cuenta.
 CONTEXT;
         }
 
-        // Build transactions list with memo
+        // Build transactions list
         $transList = '';
         foreach ($chunk as $t) {
             $memo = substr($t['memo'], 0, 150);
@@ -388,25 +384,24 @@ CONTEXT;
         }
 
         $prompt = <<<PROMPT
-Eres un Contador Senior experto en clasificación de transacciones bancarias mexicanas.
+Eres un clasificador de transacciones bancarias. Tu ÚNICA fuente de información son las REGLAS APRENDIDAS.
 
-CATÁLOGO DE CUENTAS SAP DISPONIBLES:
-{$accountsList}
-{$rulesSection}
-{$ruleContextSection}
+REGLAS APRENDIDAS (formato: [CUENTA_SAP] PATRON):
+{$rulesList}
+{$contextSection}
 
-TRANSACCIONES A CLASIFICAR (formato: SEQ. [TIPO] MEMO):
+TRANSACCIONES A CLASIFICAR:
 {$transList}
 
-INSTRUCCIONES:
-1. Analiza cada transacción y asigna la cuenta SAP más apropiada del catálogo
-2. Identifica palabras clave: SPEI, DEPOSITO, COMISION, NOMINA, RENTA, TPV, etc.
-3. Para ABONOS (ingresos): busca cuentas de ingresos o bancos
-4. Para CARGOS (egresos): busca cuentas de gastos o proveedores
-5. Ignora números de rastreo, referencias y fechas - enfócate en el concepto
-6. Confianza: 90+ muy seguro, 70-89 probable, <70 o null si no hay match claro
+INSTRUCCIONES ESTRICTAS:
+1. SOLO asigna cuentas que aparezcan en las REGLAS APRENDIDAS o en las TRANSACCIONES YA CLASIFICADAS
+2. Compara el memo con los patrones - busca palabras clave similares
+3. Ignora números de rastreo, referencias, horas y fechas
+4. Si el memo es SIMILAR a un patrón conocido, asigna esa cuenta
+5. Si NO hay coincidencia clara con ninguna regla, devuelve sap:null
+6. Confianza: 90+ muy similar, 70-89 parcialmente similar, 0 si no hay match
 
-RESPONDE SOLO con JSON array (sin explicaciones):
+RESPONDE SOLO JSON (sin explicaciones ni texto adicional):
 [{"seq":1,"sap":"1010-000-000","conf":90},{"seq":2,"sap":null,"conf":0}]
 PROMPT;
 

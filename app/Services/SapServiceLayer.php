@@ -31,6 +31,11 @@ class SapServiceLayer
      */
     public function login(string $companyDB): bool
     {
+        Log::info('SAP Service Layer login attempt', [
+            'companyDB' => $companyDB,
+            'baseUrl' => $this->baseUrl,
+        ]);
+
         try {
             $response = Http::withoutVerifying()
                 ->withOptions(['verify' => false])
@@ -46,6 +51,11 @@ class SapServiceLayer
                     if ($cookie->getName() === 'B1SESSION') {
                         $this->sessionId = $cookie->getValue();
 
+                        Log::info('SAP Login successful', [
+                            'companyDB' => $companyDB,
+                            'sessionId' => substr($this->sessionId, 0, 10).'...',
+                        ]);
+
                         return true;
                     }
                 }
@@ -55,10 +65,16 @@ class SapServiceLayer
                 if (isset($data['SessionId'])) {
                     $this->sessionId = $data['SessionId'];
 
+                    Log::info('SAP Login successful (from body)', [
+                        'companyDB' => $companyDB,
+                        'sessionId' => substr($this->sessionId, 0, 10).'...',
+                    ]);
+
                     return true;
                 }
 
                 Log::warning('SAP Login successful but no session found', [
+                    'companyDB' => $companyDB,
                     'response' => $response->json(),
                 ]);
 
@@ -66,13 +82,17 @@ class SapServiceLayer
             }
 
             Log::error('SAP Login failed', [
+                'companyDB' => $companyDB,
                 'status' => $response->status(),
                 'body' => $response->json(),
             ]);
 
             throw new \Exception('SAP Login failed: '.$response->json('error.message.value', 'Unknown error'));
         } catch (ConnectionException $e) {
-            Log::error('SAP Connection failed', ['error' => $e->getMessage()]);
+            Log::error('SAP Connection failed', [
+                'companyDB' => $companyDB,
+                'error' => $e->getMessage(),
+            ]);
             throw new \Exception('Cannot connect to SAP Service Layer: '.$e->getMessage());
         }
     }
@@ -203,6 +223,208 @@ class SapServiceLayer
     public function isLoggedIn(): bool
     {
         return $this->sessionId !== null;
+    }
+
+    /**
+     * Create Bank Pages in SAP (one request per row).
+     *
+     * BankPages endpoint format:
+     * - AccountCode: string (SAP GL account)
+     * - DueDate: string (ISO format with timestamp)
+     * - DebitAmount: float
+     * - CreditAmount: float
+     * - DocNumberType: 'bpdt_DocNum'
+     * - PaymentReference: string (description/memo)
+     *
+     * @param  array<int, array>  $rows  Bank page rows to create (with original_index key)
+     * @return array{success: bool, created_count: int, failed_count: int, errors: array, results: array}
+     */
+    public function createBankPages(array $rows): array
+    {
+        if (! $this->sessionId) {
+            return [
+                'success' => false,
+                'created_count' => 0,
+                'failed_count' => count($rows),
+                'errors' => ['Not logged in to SAP Service Layer'],
+                'results' => [],
+            ];
+        }
+
+        $createdCount = 0;
+        $failedCount = 0;
+        $errors = [];
+        $results = [];
+
+        Log::info('SAP BankPages batch start', [
+            'rows_count' => count($rows),
+        ]);
+
+        foreach ($rows as $index => $row) {
+            // Get the original index if provided, otherwise use current index
+            $originalIndex = $row['_original_index'] ?? $index;
+
+            // Remove internal tracking field before sending to SAP
+            $sapRow = $row;
+            unset($sapRow['_original_index']);
+
+            try {
+                $response = Http::withoutVerifying()
+                    ->withOptions(['verify' => false])
+                    ->timeout(30)
+                    ->withCookies(['B1SESSION' => $this->sessionId], parse_url($this->baseUrl, PHP_URL_HOST))
+                    ->post("{$this->baseUrl}/BankPages", $sapRow);
+
+                if ($response->successful()) {
+                    $data = $response->json();
+                    $sequence = $data['Sequence'] ?? null;
+                    $createdCount++;
+
+                    $results[] = [
+                        'index' => $originalIndex,
+                        'success' => true,
+                        'sap_sequence' => $sequence,
+                        'error' => null,
+                    ];
+
+                    Log::debug('SAP BankPage created', [
+                        'index' => $originalIndex,
+                        'sequence' => $sequence,
+                    ]);
+                } else {
+                    $errorMessage = $response->json('error.message.value', 'Unknown SAP error');
+                    $errors[] = "Row {$originalIndex}: {$errorMessage}";
+                    $failedCount++;
+
+                    $results[] = [
+                        'index' => $originalIndex,
+                        'success' => false,
+                        'sap_sequence' => null,
+                        'error' => $errorMessage,
+                    ];
+
+                    Log::error('SAP BankPage creation failed', [
+                        'index' => $originalIndex,
+                        'status' => $response->status(),
+                        'error' => $errorMessage,
+                        'payload' => $sapRow,
+                    ]);
+                }
+            } catch (ConnectionException $e) {
+                $errors[] = "Row {$originalIndex}: Connection error - {$e->getMessage()}";
+                $failedCount++;
+
+                $results[] = [
+                    'index' => $originalIndex,
+                    'success' => false,
+                    'sap_sequence' => null,
+                    'error' => 'Connection error: '.$e->getMessage(),
+                ];
+
+                Log::error('SAP Connection failed during BankPage creation', [
+                    'index' => $originalIndex,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        Log::info('SAP BankPages batch complete', [
+            'created' => $createdCount,
+            'failed' => $failedCount,
+        ]);
+
+        return [
+            'success' => $failedCount === 0,
+            'created_count' => $createdCount,
+            'failed_count' => $failedCount,
+            'errors' => $errors,
+            'results' => $results,
+        ];
+    }
+
+    /**
+     * Create a Bank Statement in SAP (legacy method using BankStatements endpoint).
+     *
+     * @deprecated Use createBankPages() instead
+     *
+     * @param  array<int, array>  $rows
+     * @return array{success: bool, doc_entry: int|null, error: string|null}
+     */
+    public function createBankStatement(
+        string $bankAccountKey,
+        string $statementDate,
+        string $statementNumber,
+        array $rows
+    ): array {
+        if (! $this->sessionId) {
+            return [
+                'success' => false,
+                'doc_entry' => null,
+                'error' => 'Not logged in to SAP Service Layer',
+            ];
+        }
+
+        $payload = [
+            'BankAccountKey' => $bankAccountKey,
+            'StatementDate' => $statementDate,
+            'StatementNumber' => $statementNumber,
+            'BankStatementRows' => $rows,
+        ];
+
+        Log::info('SAP BankStatement payload', [
+            'bank_account_key' => $bankAccountKey,
+            'statement_number' => $statementNumber,
+            'rows_count' => count($rows),
+        ]);
+
+        try {
+            $response = Http::withoutVerifying()
+                ->withOptions(['verify' => false])
+                ->timeout(120)
+                ->withCookies(['B1SESSION' => $this->sessionId], parse_url($this->baseUrl, PHP_URL_HOST))
+                ->post("{$this->baseUrl}/BankStatements", $payload);
+
+            if ($response->successful()) {
+                $data = $response->json();
+
+                Log::info('SAP BankStatement created successfully', [
+                    'doc_entry' => $data['DocEntry'] ?? null,
+                    'statement_number' => $statementNumber,
+                ]);
+
+                return [
+                    'success' => true,
+                    'doc_entry' => $data['DocEntry'] ?? null,
+                    'error' => null,
+                ];
+            }
+
+            $errorMessage = $response->json('error.message.value', 'Unknown SAP error');
+            Log::error('SAP BankStatement creation failed', [
+                'statement_number' => $statementNumber,
+                'status' => $response->status(),
+                'error' => $errorMessage,
+                'payload' => $payload,
+            ]);
+
+            return [
+                'success' => false,
+                'doc_entry' => null,
+                'error' => $errorMessage,
+            ];
+
+        } catch (ConnectionException $e) {
+            Log::error('SAP Connection failed during BankStatement creation', [
+                'statement_number' => $statementNumber,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'doc_entry' => null,
+                'error' => 'Connection error: '.$e->getMessage(),
+            ];
+        }
     }
 
     /**

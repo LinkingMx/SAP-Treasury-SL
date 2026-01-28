@@ -21,6 +21,17 @@ class BankAccountFactory extends Factory
             'branch_id' => Branch::factory(),
             'name' => 'Cuenta '.fake()->randomElement(['Operativa', 'Nómina', 'Proveedores', 'Principal']),
             'account' => fake()->numerify('####-####-##########'),
+            'sap_bank_key' => null,
         ];
+    }
+
+    /**
+     * Indicate that the bank account has a SAP bank key configured.
+     */
+    public function withSapBankKey(?string $key = null): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'sap_bank_key' => $key ?? fake()->numerify('####-###-###'),
+        ]);
     }
 }

@@ -29,6 +29,12 @@ class BankAccountsTable
                     ->searchable()
                     ->sortable(),
 
+                TextColumn::make('sap_bank_key')
+                    ->label('Clave SAP')
+                    ->sortable()
+                    ->placeholder('No configurado')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 TextColumn::make('created_at')
                     ->label('Creado')
                     ->dateTime('d/m/Y H:i')

@@ -15,6 +15,7 @@ export interface BankAccount {
     branch_id: number;
     name: string;
     account: string;
+    sap_bank_key?: string | null;
 }
 
 export interface Bank {
@@ -185,4 +186,35 @@ export interface User {
     created_at: string;
     updated_at: string;
     [key: string]: unknown; // This allows for additional properties...
+}
+
+// Bank Statement types for SAP integration
+export type BankStatementStatus = 'pending' | 'sent' | 'failed';
+
+export interface BankStatementRow {
+    DueDate: string;
+    Details: string;
+    Debit: number;
+    Credit: number;
+}
+
+export interface BankStatementHistory {
+    id: number;
+    statement_number: string;
+    statement_date: string;
+    original_filename: string;
+    rows_count: number;
+    status: BankStatementStatus;
+    status_label: string;
+    sap_doc_entry: number | null;
+    sap_error: string | null;
+    bank_account: {
+        id: number;
+        name: string;
+    };
+    user: {
+        id: number;
+        name: string;
+    };
+    created_at: string;
 }

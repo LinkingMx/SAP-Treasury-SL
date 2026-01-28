@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AfirmeController;
 use App\Http\Controllers\AiIngestController;
+use App\Http\Controllers\BankStatementController;
 use App\Http\Controllers\BatchController;
 use App\Models\Bank;
 use App\Models\BankAccount;
@@ -21,7 +22,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('tesoreria/index', [
             'branches' => auth()->user()->branches()->get(['branches.id', 'branches.name']),
             'bankAccounts' => BankAccount::whereIn('branch_id', $branchIds)
-                ->get(['id', 'branch_id', 'name', 'account']),
+                ->get(['id', 'branch_id', 'name', 'account', 'sap_bank_key']),
             'banks' => Bank::orderBy('name')->get(['id', 'name']),
         ]);
     })->name('tesoreria');
@@ -44,10 +45,31 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('banks', [AiIngestController::class, 'getBanks'])->name('banks');
     });
 
+    // Bank Statements to SAP
+    Route::prefix('tesoreria/bank-statements')->name('bank-statements.')->group(function () {
+        Route::post('analyze', [BankStatementController::class, 'analyze'])->name('analyze');
+        Route::post('preview', [BankStatementController::class, 'preview'])->name('preview');
+        Route::post('send', [BankStatementController::class, 'send'])->name('send');
+        Route::get('history', [BankStatementController::class, 'history'])->name('history');
+        Route::get('{bankStatement}', [BankStatementController::class, 'show'])->name('show');
+        Route::post('{bankStatement}/reprocess', [BankStatementController::class, 'reprocess'])->name('reprocess');
+    });
+
     // Afirme Integration
     Route::get('afirme', [AfirmeController::class, 'index'])->name('afirme');
     Route::get('afirme/payments', [AfirmeController::class, 'getPayments'])->name('afirme.payments');
     Route::post('afirme/download', [AfirmeController::class, 'downloadTxt'])->name('afirme.download');
+
+    // Bank Reconciliation - Bank Statement Upload
+    Route::get('conciliacion/carga-extracto', function () {
+        $branchIds = auth()->user()->branches()->pluck('branches.id');
+
+        return Inertia::render('conciliacion/carga-extracto', [
+            'branches' => auth()->user()->branches()->get(['branches.id', 'branches.name']),
+            'bankAccounts' => BankAccount::whereIn('branch_id', $branchIds)
+                ->get(['id', 'branch_id', 'name', 'account', 'sap_bank_key']),
+        ]);
+    })->name('conciliacion.carga-extracto');
 });
 
 require __DIR__.'/settings.php';

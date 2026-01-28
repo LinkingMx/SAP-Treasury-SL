@@ -20,6 +20,7 @@ class BankAccount extends Model
         'branch_id',
         'name',
         'account',
+        'sap_bank_key',
     ];
 
     /**

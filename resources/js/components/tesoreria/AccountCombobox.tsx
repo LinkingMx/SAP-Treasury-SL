@@ -29,10 +29,10 @@ interface Props {
     hasError?: boolean;
 }
 
-export default function AccountCombobox({ accounts, value, onChange, hasError }: Props) {
+export default function AccountCombobox({ accounts = [], value, onChange, hasError }: Props) {
     const [open, setOpen] = useState(false);
 
-    const selectedAccount = accounts.find((a) => a.code === value);
+    const selectedAccount = accounts?.find((a) => a.code === value);
     const isSkipSap = value === SKIP_SAP_CODE;
 
     return (

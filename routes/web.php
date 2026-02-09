@@ -70,6 +70,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 ->get(['id', 'branch_id', 'name', 'account', 'sap_bank_key']),
         ]);
     })->name('conciliacion.carga-extracto');
+
+    // Pagos
+    Route::get('pagos/sap', function () {
+        return Inertia::render('pagos/sap');
+    })->name('pagos.sap');
 });
 
 require __DIR__.'/settings.php';

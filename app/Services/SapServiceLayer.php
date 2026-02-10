@@ -489,4 +489,117 @@ class SapServiceLayer
             return [];
         }
     }
+
+    /**
+     * Create a Vendor Payment in SAP.
+     *
+     * @param  array  $invoices  Array de VendorPaymentInvoice grouped by CardCode
+     * @return array{success: bool, doc_num: int|null, error: string|null}
+     */
+    public function createVendorPayment(array $invoices): array
+    {
+        if (! $this->sessionId) {
+            return [
+                'success' => false,
+                'doc_num' => null,
+                'error' => 'Not logged in to SAP Service Layer',
+            ];
+        }
+
+        if (empty($invoices)) {
+            return [
+                'success' => false,
+                'doc_num' => null,
+                'error' => 'No invoices provided',
+            ];
+        }
+
+        // Get data from first invoice (all invoices in group should have same data)
+        $firstInvoice = $invoices[0];
+        $cardCode = $firstInvoice->card_code;
+        $docDate = $firstInvoice->doc_date->format('Y-m-d');
+        $transferDate = $firstInvoice->transfer_date->format('Y-m-d');
+        $transferAccount = $firstInvoice->transfer_account;
+
+        // Build PaymentInvoices array
+        $paymentInvoices = [];
+        $transferSum = 0;
+
+        foreach ($invoices as $invoice) {
+            $paymentInvoices[] = [
+                'LineNum' => $invoice->line_num,
+                'DocEntry' => $invoice->doc_entry,
+                'SumApplied' => (float) $invoice->sum_applied,
+                'InvoiceType' => $invoice->invoice_type,
+            ];
+
+            $transferSum += (float) $invoice->sum_applied;
+        }
+
+        // Build payload
+        $payload = [
+            'CardCode' => $cardCode,
+            'DocDate' => $docDate,
+            'TransferSum' => $transferSum,
+            'TransferAccount' => $transferAccount,
+            'TransferDate' => $transferDate,
+            'PaymentInvoices' => $paymentInvoices,
+        ];
+
+        Log::info('SAP VendorPayment payload', [
+            'card_code' => $cardCode,
+            'transfer_sum' => $transferSum,
+            'invoices_count' => count($paymentInvoices),
+        ]);
+
+        try {
+            $response = Http::withoutVerifying()
+                ->withOptions(['verify' => false])
+                ->timeout(30)
+                ->withCookies(['B1SESSION' => $this->sessionId], parse_url($this->baseUrl, PHP_URL_HOST))
+                ->post("{$this->baseUrl}/VendorPayments", $payload);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                $docNum = $data['DocNum'] ?? null;
+
+                Log::info('SAP VendorPayment created successfully', [
+                    'card_code' => $cardCode,
+                    'doc_num' => $docNum,
+                ]);
+
+                return [
+                    'success' => true,
+                    'doc_num' => $docNum,
+                    'error' => null,
+                ];
+            }
+
+            $errorMessage = $response->json('error.message.value', 'Unknown SAP error');
+            Log::error('SAP VendorPayment creation failed', [
+                'card_code' => $cardCode,
+                'status' => $response->status(),
+                'error' => $errorMessage,
+                'payload' => $payload,
+            ]);
+
+            return [
+                'success' => false,
+                'doc_num' => null,
+                'error' => $errorMessage,
+            ];
+
+        } catch (ConnectionException $e) {
+            Log::error('SAP Connection failed during VendorPayment creation', [
+                'card_code' => $cardCode,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'doc_num' => null,
+                'error' => 'Connection error: '.$e->getMessage(),
+            ];
+        }
+    }
 }

@@ -71,10 +71,27 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ]);
     })->name('conciliacion.carga-extracto');
 
-    // Pagos
+    // Pagos a SAP
     Route::get('pagos/sap', function () {
-        return Inertia::render('pagos/sap');
+        $branchIds = auth()->user()->branches()->pluck('branches.id');
+
+        return Inertia::render('pagos/sap', [
+            'branches' => auth()->user()->branches()->get(['branches.id', 'branches.name']),
+            'bankAccounts' => BankAccount::whereIn('branch_id', $branchIds)
+                ->get(['id', 'branch_id', 'name', 'account']),
+        ]);
     })->name('pagos.sap');
+
+    Route::prefix('pagos/sap')->name('vendor-payments.')->group(function () {
+        Route::get('batches', [App\Http\Controllers\VendorPaymentController::class, 'index'])->name('index');
+        Route::get('batches/{batch}', [App\Http\Controllers\VendorPaymentController::class, 'show'])->name('show');
+        Route::post('batches', [App\Http\Controllers\VendorPaymentController::class, 'store'])->name('store');
+        Route::delete('batches/{batch}', [App\Http\Controllers\VendorPaymentController::class, 'destroy'])->name('destroy');
+        Route::post('batches/{batch}/process', [App\Http\Controllers\VendorPaymentController::class, 'processToSap'])->name('process');
+        Route::post('batches/{batch}/payments/{cardCode}/reprocess', [App\Http\Controllers\VendorPaymentController::class, 'reprocessPayment'])->name('reprocess');
+        Route::get('template/download', [App\Http\Controllers\VendorPaymentController::class, 'downloadTemplate'])->name('template');
+        Route::post('batches/error-log', [App\Http\Controllers\VendorPaymentController::class, 'downloadErrorLog'])->name('error-log');
+    });
 });
 
 require __DIR__.'/settings.php';

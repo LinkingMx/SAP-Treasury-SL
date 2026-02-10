@@ -25,6 +25,14 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
         protected string $filename
     ) {}
 
+    /**
+     * Specify which row contains the headings.
+     */
+    public function headingRow(): int
+    {
+        return 4;
+    }
+
     public function collection(Collection $rows): void
     {
         // Validate all rows before creating anything
@@ -83,7 +91,7 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
                         'batch_id' => $this->batch->id,
                         'card_code' => $rowArray['cardcode'],
                         'card_name' => $rowArray['cardname'] ?? null,
-                        'doc_date' => $this->parseDate($rowArray['docdate']),
+                        'doc_date' => $this->parseDate($rowArray['docdate_fecha_pago']),
                         'transfer_date' => $this->parseDate($rowArray['transferdate']),
                         'transfer_account' => $rowArray['transferaccount'],
                         'line_num' => $lineNum++, // Auto-assign LineNum
@@ -101,7 +109,7 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
         $validator = Validator::make($row, [
             'cardcode' => ['required', 'string', 'max:50'],
             'cardname' => ['nullable', 'string'],
-            'docdate' => ['required'],
+            'docdate_fecha_pago' => ['required'],
             'transferdate' => ['required'],
             'transferaccount' => ['required', 'string', 'max:50'],
             'docentry' => ['required', 'integer'],
@@ -110,7 +118,7 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
         ], [
             'cardcode.required' => 'El código del proveedor es requerido',
             'cardcode.max' => 'El código del proveedor no debe exceder 50 caracteres',
-            'docdate.required' => 'La fecha del documento es requerida',
+            'docdate_fecha_pago.required' => 'La fecha del documento es requerida',
             'transferdate.required' => 'La fecha de transferencia es requerida',
             'transferaccount.required' => 'La cuenta de transferencia es requerida',
             'docentry.required' => 'El número de factura (DocEntry) es requerido',
@@ -130,7 +138,7 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
         }
 
         // Validate date formats
-        if (isset($row['docdate']) && ! $this->isValidDate($row['docdate'])) {
+        if (isset($row['docdate_fecha_pago']) && ! $this->isValidDate($row['docdate_fecha_pago'])) {
             $this->errors[] = [
                 'row' => $rowNumber,
                 'error' => 'El formato de la fecha del documento es inválido',
@@ -149,12 +157,12 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
     {
         // Validate that all rows for the same vendor have consistent data
         $firstRow = $vendorRows->first();
-        $docDate = $this->parseDate($firstRow['docdate']);
+        $docDate = $this->parseDate($firstRow['docdate_fecha_pago']);
         $transferDate = $this->parseDate($firstRow['transferdate']);
         $transferAccount = $firstRow['transferaccount'];
 
         foreach ($vendorRows as $row) {
-            if ($this->parseDate($row['docdate'])->format('Y-m-d') !== $docDate->format('Y-m-d')) {
+            if ($this->parseDate($row['docdate_fecha_pago'])->format('Y-m-d') !== $docDate->format('Y-m-d')) {
                 $this->errors[] = [
                     'row' => 0,
                     'error' => "Todas las facturas del proveedor {$cardCode} deben tener la misma fecha de documento",

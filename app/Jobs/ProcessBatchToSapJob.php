@@ -81,10 +81,26 @@ class ProcessBatchToSapJob implements ShouldQueue
         $hasErrors = false;
         $bplId = $branch->sap_branch_id === 0 ? null : $branch->sap_branch_id;
 
+        // Special code for transactions that should not be sent to SAP
+        $skipSapCode = '__SKIP_SAP__';
+
         // Process each transaction
         foreach ($this->batch->transactions as $transaction) {
             // Skip already processed transactions
             if ($transaction->sap_number !== null) {
+                continue;
+            }
+
+            // Skip transactions marked as "No enviar a SAP"
+            if ($transaction->counterpart_account === $skipSapCode) {
+                $transaction->update([
+                    'sap_number' => 0, // Mark as processed but skipped
+                    'error' => null,
+                ]);
+                Log::info('Transaction skipped (marked as no-SAP)', [
+                    'transaction_id' => $transaction->id,
+                ]);
+
                 continue;
             }
 

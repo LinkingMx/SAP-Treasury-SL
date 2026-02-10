@@ -41,4 +41,8 @@ return [
         'password' => env('SAP_SL_PASSWORD'),
     ],
 
+    'gemini' => [
+        'api_key' => env('GEMINI_API_KEY'),
+    ],
+
 ];

@@ -28,7 +28,7 @@ class BatchController extends Controller
         $batches = Batch::query()
             ->where('branch_id', $request->input('branch_id'))
             ->where('bank_account_id', $request->input('bank_account_id'))
-            ->orderBy('processed_at', 'desc')
+            ->orderByDesc('created_at')
             ->paginate(10);
 
         return response()->json($batches);
@@ -49,6 +49,7 @@ class BatchController extends Controller
             'status_label' => $batch->status->label(),
             'error_message' => $batch->error_message,
             'processed_at' => $batch->processed_at?->format('Y-m-d H:i:s'),
+            'created_at' => $batch->created_at->format('Y-m-d H:i:s'),
             'branch' => $batch->branch,
             'bank_account' => $batch->bankAccount,
             'user' => $batch->user?->name,
@@ -270,6 +271,29 @@ class BatchController extends Controller
 
         // Clear transaction error before retry
         $transaction->update(['error' => null]);
+
+        // Check if transaction is marked as "No enviar a SAP"
+        if ($transaction->counterpart_account === '__SKIP_SAP__') {
+            $transaction->update([
+                'sap_number' => 0,
+                'error' => null,
+            ]);
+
+            // Check if all transactions in the batch are processed
+            $unprocessedCount = $batch->transactions()->whereNull('sap_number')->count();
+            $batch->update([
+                'status' => $unprocessedCount === 0 ? BatchStatus::Completed : BatchStatus::Failed,
+                'error_message' => $unprocessedCount === 0 ? null : "{$unprocessedCount} transacciones sin procesar",
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Transacción marcada como omitida (no SAP)',
+                'sap_number' => 0,
+                'batch_status' => $batch->fresh()->status->value,
+                'batch_status_label' => $batch->fresh()->status->label(),
+            ]);
+        }
 
         // Login to SAP
         try {

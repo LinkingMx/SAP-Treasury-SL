@@ -46,8 +46,14 @@ class BankAccountForm
                                 ignoreRecord: true,
                                 modifyRuleUsing: fn (Unique $rule, callable $get) => $rule->where('branch_id', $get('branch_id'))
                             )
-                            ->helperText('Número de cuenta bancaria (debe ser único por sucursal)')
-                            ->columnSpanFull(),
+                            ->helperText('Número de cuenta bancaria (debe ser único por sucursal)'),
+
+                        TextInput::make('sap_bank_key')
+                            ->label('Clave Bancaria SAP')
+                            ->prefixIcon('heroicon-o-key')
+                            ->placeholder('1020-001-000')
+                            ->maxLength(50)
+                            ->helperText('BankAccountKey de SAP para envío de extractos bancarios'),
                     ])
                     ->columns(2),
             ]);

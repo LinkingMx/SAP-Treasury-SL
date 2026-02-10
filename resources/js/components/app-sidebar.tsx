@@ -10,9 +10,11 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { afirme, dashboard, tesoreria } from '@/routes';
+import { cargaExtracto } from '@/routes/conciliacion';
+import { sap as pagosSap } from '@/routes/pagos';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { FileText, Landmark, LayoutGrid } from 'lucide-react';
+import { Building2, FileSpreadsheet, FileText, Landmark, LayoutGrid, Wallet } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const platformItems: NavItem[] = [
@@ -36,6 +38,24 @@ const bankingItems: NavItem[] = [
     },
 ];
 
+const conciliacionItems: NavItem[] = [
+    {
+        title: 'Carga de Extracto Bancario',
+        href: cargaExtracto(),
+        icon: FileSpreadsheet,
+    },
+];
+
+const pagosItems: NavItem[] = [
+    {
+        title: 'Pagos a SAP',
+        href: pagosSap(),
+        icon: Wallet,
+    },
+];
+
+const intercompaniaItems: NavItem[] = [];
+
 export function AppSidebar() {
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -54,6 +74,9 @@ export function AppSidebar() {
             <SidebarContent>
                 <NavMain items={platformItems} label="Plataforma" />
                 <NavMain items={bankingItems} label="Opciones de bancos" />
+                <NavMain items={conciliacionItems} label="Conciliación Bancaria" />
+                <NavMain items={pagosItems} label="Pagos" />
+                <NavMain items={intercompaniaItems} label="Procesos Intercompañía" />
             </SidebarContent>
 
             <SidebarFooter>

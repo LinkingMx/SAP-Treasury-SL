@@ -15,6 +15,66 @@ export interface BankAccount {
     branch_id: number;
     name: string;
     account: string;
+    sap_bank_key?: string | null;
+}
+
+export interface Bank {
+    id: number;
+    name: string;
+}
+
+export interface ParseConfig {
+    bank_name_guess: string;
+    header_row_index: number;
+    data_start_row: number;
+    columns: {
+        date: { index: number; format: string };
+        description: { index: number };
+        debit: { index: number; is_signed: boolean } | null;
+        credit: { index: number; is_signed: boolean } | null;
+        signed_amount: { index: number } | null;
+    };
+}
+
+export interface SapAccount {
+    code: string;
+    name: string;
+}
+
+export interface ClassifiedTransaction {
+    sequence: number;
+    due_date: string;
+    memo: string;
+    debit_amount: number | null;
+    credit_amount: number | null;
+    sap_account_code: string | null;
+    sap_account_name: string | null;
+    confidence: number;
+    source: 'rule' | 'ai' | 'manual' | 'none' | 'error';
+    user_modified?: boolean;
+    ai_suggested_account?: string | null;
+}
+
+export interface ClassifyPreviewResponse {
+    success: boolean;
+    transactions: ClassifiedTransaction[];
+    summary: {
+        total_records: number;
+        total_debit: string;
+        total_credit: string;
+        unclassified_count: number;
+    };
+    chart_of_accounts: SapAccount[];
+    sap_connected: boolean;
+    sap_database: string;
+}
+
+export interface AnalyzeStructureResponse {
+    success: boolean;
+    parse_config: ParseConfig;
+    bank_name_guess: string | null;
+    fingerprint: string;
+    is_cached: boolean;
 }
 
 export interface ImportError {
@@ -45,7 +105,7 @@ export interface Batch {
     total_debit: string;
     total_credit: string;
     status: BatchStatus;
-    processed_at: string;
+    processed_at: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -73,7 +133,8 @@ export interface BatchDetail {
     status: BatchStatus;
     status_label: string;
     error_message: string | null;
-    processed_at: string;
+    processed_at: string | null;
+    created_at: string;
     branch: Branch;
     bank_account: BankAccount;
     user: string | null;
@@ -125,4 +186,35 @@ export interface User {
     created_at: string;
     updated_at: string;
     [key: string]: unknown; // This allows for additional properties...
+}
+
+// Bank Statement types for SAP integration
+export type BankStatementStatus = 'pending' | 'sent' | 'failed';
+
+export interface BankStatementRow {
+    DueDate: string;
+    Details: string;
+    Debit: number;
+    Credit: number;
+}
+
+export interface BankStatementHistory {
+    id: number;
+    statement_number: string;
+    statement_date: string;
+    original_filename: string;
+    rows_count: number;
+    status: BankStatementStatus;
+    status_label: string;
+    sap_doc_entry: number | null;
+    sap_error: string | null;
+    bank_account: {
+        id: number;
+        name: string;
+    };
+    user: {
+        id: number;
+        name: string;
+    };
+    created_at: string;
 }

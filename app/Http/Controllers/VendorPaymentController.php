@@ -7,6 +7,7 @@ use App\Exports\VendorPaymentsTemplateExport;
 use App\Imports\VendorPaymentsImport;
 use App\Jobs\ProcessVendorPaymentsToSapJob;
 use App\Models\VendorPaymentBatch;
+use App\Models\VendorPaymentInvoice;
 use App\Services\SapServiceLayer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -193,8 +194,28 @@ class VendorPaymentController extends Controller
                 ], 500);
             }
 
+            // Resolve DocNum → DocEntry for each invoice
+            $resolvedDocEntries = [];
+            foreach ($invoices as $invoice) {
+                $resolved = $sap->resolveDocEntry($invoice->card_code, $invoice->doc_entry, $invoice->invoice_type);
+
+                if (! $resolved['success']) {
+                    VendorPaymentInvoice::where('id', $invoice->id)->update(['error' => $resolved['error']]);
+
+                    $sap->logout();
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Error al resolver factura: '.$resolved['error'],
+                    ], 422);
+                }
+
+                $resolvedDocEntries[$invoice->id] = $resolved['doc_entry'];
+            }
+
             // Process payment
-            $result = $sap->createVendorPayment($invoices->all());
+            $bplId = $branch->sap_branch_id === 0 ? null : $branch->sap_branch_id;
+            $result = $sap->createVendorPayment($invoices->all(), $bplId, $resolvedDocEntries);
 
             // Logout
             $sap->logout();
@@ -275,7 +296,7 @@ class VendorPaymentController extends Controller
         $errors = $request->input('errors');
 
         $content = "=== LOG DE ERRORES - PAGOS A PROVEEDORES ===\n\n";
-        $content .= "Fecha: ".now()->format('Y-m-d H:i:s')."\n\n";
+        $content .= 'Fecha: '.now()->format('Y-m-d H:i:s')."\n\n";
 
         foreach ($errors as $error) {
             if ($error['row'] > 0) {

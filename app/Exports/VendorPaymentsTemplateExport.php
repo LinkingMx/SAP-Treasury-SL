@@ -29,7 +29,7 @@ class VendorPaymentsTemplateExport implements FromCollection, WithStyles
                 "DocDate\n(Fecha Pago)",
                 'TransferDate',
                 'TransferAccount',
-                'DocEntry',
+                'DocNum',
                 'InvoiceType',
                 'SumApplied',
             ],

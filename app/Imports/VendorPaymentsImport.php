@@ -95,7 +95,7 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
                         'transfer_date' => $this->parseDate($rowArray['transferdate']),
                         'transfer_account' => $rowArray['transferaccount'],
                         'line_num' => $lineNum++, // Auto-assign LineNum
-                        'doc_entry' => (int) $rowArray['docentry'],
+                        'doc_entry' => (int) $rowArray['docnum'],
                         'invoice_type' => $rowArray['invoicetype'] ?? 'it_PurchaseInvoice',
                         'sum_applied' => $this->parseAmount($rowArray['sumapplied']),
                     ]);
@@ -112,7 +112,7 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
             'docdate_fecha_pago' => ['required'],
             'transferdate' => ['required'],
             'transferaccount' => ['required', 'string', 'max:50'],
-            'docentry' => ['required', 'integer'],
+            'docnum' => ['required', 'integer'],
             'invoicetype' => ['nullable', 'string', 'max:50'],
             'sumapplied' => ['required', 'numeric', 'gt:0'],
         ], [
@@ -121,8 +121,8 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
             'docdate_fecha_pago.required' => 'La fecha del documento es requerida',
             'transferdate.required' => 'La fecha de transferencia es requerida',
             'transferaccount.required' => 'La cuenta de transferencia es requerida',
-            'docentry.required' => 'El número de factura (DocEntry) es requerido',
-            'docentry.integer' => 'El número de factura debe ser un número entero',
+            'docnum.required' => 'El número de documento (DocNum) es requerido',
+            'docnum.integer' => 'El número de documento debe ser un número entero',
             'sumapplied.required' => 'El monto a pagar es requerido',
             'sumapplied.numeric' => 'El monto a pagar debe ser un número',
             'sumapplied.gt' => 'El monto a pagar debe ser mayor a 0',

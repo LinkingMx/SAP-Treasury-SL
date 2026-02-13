@@ -491,12 +491,63 @@ class SapServiceLayer
     }
 
     /**
+     * Resolve a DocNum to DocEntry via SAP Service Layer.
+     *
+     * @return array{success: bool, doc_entry: int|null, error: string|null}
+     */
+    public function resolveDocEntry(string $cardCode, int $docNum, string $invoiceType = 'it_PurchaseInvoice'): array
+    {
+        if (! $this->sessionId) {
+            return ['success' => false, 'doc_entry' => null, 'error' => 'Not logged in to SAP Service Layer'];
+        }
+
+        $endpoint = $invoiceType === 'it_PurchaseInvoice' ? 'PurchaseInvoices' : 'PurchaseCreditNotes';
+
+        try {
+            $response = Http::withoutVerifying()
+                ->withOptions(['verify' => false])
+                ->timeout(30)
+                ->withCookies(['B1SESSION' => $this->sessionId], parse_url($this->baseUrl, PHP_URL_HOST))
+                ->get("{$this->baseUrl}/{$endpoint}", [
+                    '$filter' => "DocNum eq {$docNum} and CardCode eq '{$cardCode}'",
+                    '$select' => 'DocEntry,DocNum,CardCode,DocTotal,PaidToDate,DocumentStatus',
+                ]);
+
+            if (! $response->successful()) {
+                return ['success' => false, 'doc_entry' => null, 'error' => "Error al consultar {$endpoint}: ".$response->json('error.message.value', 'Unknown')];
+            }
+
+            $results = $response->json('value', []);
+
+            if (empty($results)) {
+                return ['success' => false, 'doc_entry' => null, 'error' => "No se encontró factura DocNum {$docNum} para proveedor {$cardCode}"];
+            }
+
+            $invoice = $results[0];
+
+            if ($invoice['DocumentStatus'] !== 'bost_Open') {
+                return ['success' => false, 'doc_entry' => null, 'error' => "La factura DocNum {$docNum} está cerrada o cancelada en SAP"];
+            }
+
+            $balance = $invoice['DocTotal'] - $invoice['PaidToDate'];
+            if ($balance <= 0) {
+                return ['success' => false, 'doc_entry' => null, 'error' => "La factura DocNum {$docNum} ya está pagada en su totalidad"];
+            }
+
+            return ['success' => true, 'doc_entry' => (int) $invoice['DocEntry'], 'error' => null];
+
+        } catch (ConnectionException $e) {
+            return ['success' => false, 'doc_entry' => null, 'error' => 'Connection error: '.$e->getMessage()];
+        }
+    }
+
+    /**
      * Create a Vendor Payment in SAP.
      *
      * @param  array  $invoices  Array de VendorPaymentInvoice grouped by CardCode
      * @return array{success: bool, doc_num: int|null, error: string|null}
      */
-    public function createVendorPayment(array $invoices): array
+    public function createVendorPayment(array $invoices, ?int $bplId = null, array $resolvedDocEntries = []): array
     {
         if (! $this->sessionId) {
             return [
@@ -528,7 +579,7 @@ class SapServiceLayer
         foreach ($invoices as $invoice) {
             $paymentInvoices[] = [
                 'LineNum' => $invoice->line_num,
-                'DocEntry' => $invoice->doc_entry,
+                'DocEntry' => $resolvedDocEntries[$invoice->id] ?? $invoice->doc_entry,
                 'SumApplied' => (float) $invoice->sum_applied,
                 'InvoiceType' => $invoice->invoice_type,
             ];
@@ -545,6 +596,10 @@ class SapServiceLayer
             'TransferDate' => $transferDate,
             'PaymentInvoices' => $paymentInvoices,
         ];
+
+        if ($bplId !== null) {
+            $payload['BPLID'] = $bplId;
+        }
 
         Log::info('SAP VendorPayment payload', [
             'card_code' => $cardCode,

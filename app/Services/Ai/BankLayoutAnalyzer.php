@@ -275,10 +275,17 @@ PROMPT;
                     return null;
 
                 case 'standard_dmy':
-                    return Carbon::createFromFormat('d/m/Y', (string) $value);
+                    $parts = explode('/', (string) $value);
+                    // Use 'y' for 2-digit years (26 → 2026), 'Y' for 4-digit years
+                    $yearFormat = (isset($parts[2]) && strlen(trim($parts[2])) <= 2) ? 'd/m/y' : 'd/m/Y';
+
+                    return Carbon::createFromFormat($yearFormat, (string) $value);
 
                 case 'standard_mdy':
-                    return Carbon::createFromFormat('m/d/Y', (string) $value);
+                    $parts = explode('/', (string) $value);
+                    $yearFormat = (isset($parts[2]) && strlen(trim($parts[2])) <= 2) ? 'm/d/y' : 'm/d/Y';
+
+                    return Carbon::createFromFormat($yearFormat, (string) $value);
 
                 default:
                     return Carbon::parse((string) $value);

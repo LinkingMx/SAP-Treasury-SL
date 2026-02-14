@@ -112,6 +112,9 @@ class BankStatementService
                 $date .= 'T00:00:00Z';
             }
 
+            // Validate and fix year — 2-digit years parsed as 00XX need correction
+            $date = $this->fixDateYear($date);
+
             $debitAmount = (float) ($tx['debit_amount'] ?? 0);
             $creditAmount = (float) ($tx['credit_amount'] ?? 0);
 
@@ -119,13 +122,16 @@ class BankStatementService
             // Debit > 0 = Egreso (expense/outflow), Credit > 0 = Ingreso (income/inflow)
             $reference = $debitAmount > 0 ? 'Egreso' : 'Ingreso';
 
+            // SAP BankPage.Memo has a 254 character limit
+            $memo = mb_substr($tx['memo'] ?? $tx['raw_memo'] ?? '', 0, 254);
+
             $rows[] = [
                 'AccountCode' => $glAccountCode,
                 'DueDate' => $date,
                 'DebitAmount' => $debitAmount,
                 'CreditAmount' => $creditAmount,
                 'DocNumberType' => 'bpdt_DocNum',
-                'Memo' => $tx['memo'] ?? $tx['raw_memo'] ?? '',
+                'Memo' => $memo,
                 'Reference' => $reference,
             ];
         }
@@ -431,6 +437,27 @@ class BankStatementService
     }
 
     /**
+     * Fix dates with 2-digit years that were incorrectly parsed as 00XX.
+     * For example, 0026-02-03T00:00:00Z → 2026-02-03T00:00:00Z.
+     */
+    protected function fixDateYear(string $date): string
+    {
+        try {
+            $parsed = Carbon::parse($date);
+
+            if ($parsed->year < 100) {
+                $parsed->year += 2000;
+            }
+
+            return $parsed->format('Y-m-d\T00:00:00\Z');
+        } catch (\Exception $e) {
+            Log::warning('Could not fix date year', ['date' => $date, 'error' => $e->getMessage()]);
+
+            return $date;
+        }
+    }
+
+    /**
      * Normalize a single row to SAP BankPages format.
      *
      * @param  array  $row  The stored row data
@@ -444,8 +471,14 @@ class BankStatementService
             $dueDate .= 'T00:00:00Z';
         }
 
+        // Validate and fix year — 2-digit years parsed as 00XX need correction
+        if ($dueDate) {
+            $dueDate = $this->fixDateYear($dueDate);
+        }
+
         // Extract description - handle multiple field names
-        $description = $row['Memo'] ?? $row['PaymentReference'] ?? $row['Details'] ?? '';
+        // SAP BankPage.Memo has a 254 character limit
+        $description = mb_substr($row['Memo'] ?? $row['PaymentReference'] ?? $row['Details'] ?? '', 0, 254);
 
         // Extract amounts as floats
         $debitAmount = 0.0;

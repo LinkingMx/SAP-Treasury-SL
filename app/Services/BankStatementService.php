@@ -141,18 +141,25 @@ class BankStatementService
 
     /**
      * Generate a unique statement number.
-     * Format: YYYY-MM-XXX where XXX is sequential within the month.
+     * Format: YYYY-MM-XXX where XXX is sequential within the month (globally unique).
      */
     public function generateStatementNumber(int $branchId, Carbon $date): string
     {
         $yearMonth = $date->format('Y-m');
 
-        // Count existing statements for this branch in this month
-        $count = BankStatement::where('branch_id', $branchId)
-            ->where('statement_number', 'LIKE', "{$yearMonth}-%")
-            ->count();
+        // Get the highest existing sequence globally (constraint is unique across all branches)
+        $lastNumber = BankStatement::where('statement_number', 'LIKE', "{$yearMonth}-%")
+            ->orderByDesc('statement_number')
+            ->value('statement_number');
 
-        $sequence = str_pad((string) ($count + 1), 3, '0', STR_PAD_LEFT);
+        $nextSequence = 1;
+        if ($lastNumber) {
+            $parts = explode('-', $lastNumber);
+            $lastSequence = (int) end($parts);
+            $nextSequence = $lastSequence + 1;
+        }
+
+        $sequence = str_pad((string) $nextSequence, 3, '0', STR_PAD_LEFT);
 
         return "{$yearMonth}-{$sequence}";
     }

@@ -2,347 +2,242 @@
 
 namespace App\Services\Ai;
 
-use App\Models\BankLayoutTemplate;
-use Carbon\Carbon;
-use Gemini\Client as GeminiClient;
+use Gemini\Data\Blob;
+use Gemini\Data\GenerationConfig;
+use Gemini\Enums\FinishReason;
+use Gemini\Enums\MimeType;
+use Gemini\Enums\ResponseMimeType;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use PhpOffice\PhpSpreadsheet\IOFactory;
-use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 
 class BankLayoutAnalyzer
 {
     /**
-     * Analyze an uploaded file and return parse configuration.
+     * Step 1: Analyze layout — AI detects bank name, header structure, and column format.
      *
      * @return array{parse_config: array, bank_name_guess: string|null, fingerprint: string, is_cached: bool}
      */
     public function analyze(UploadedFile $file): array
     {
-        $spreadsheet = IOFactory::load($file->getPathname());
-        $sheet = $spreadsheet->getActiveSheet();
-        $data = $sheet->toArray();
+        $rawContent = $this->readFileAsText($file);
 
-        if (count($data) < 2) {
-            throw new \InvalidArgumentException('El archivo debe contener al menos una fila de encabezados y una de datos.');
+        if (trim($rawContent) === '') {
+            throw new \InvalidArgumentException('El archivo está vacío.');
         }
 
-        $headers = $data[0];
-        $sampleRows = array_slice($data, 1, 5);
+        $sample = implode("\n", array_slice(explode("\n", $rawContent), 0, 30));
 
-        $fingerprint = $this->generateFingerprint($headers);
+        $prompt = <<<'PROMPT'
+Analiza este extracto bancario y devuelve un JSON con:
+1. "bank_name_guess": nombre del banco detectado
+2. "header_lines_count": número de líneas de encabezado antes de las transacciones (información del banco, títulos de columna, etc.)
+3. "column_description": descripción textual del formato de las columnas de transacciones. Ejemplo: "Columna 1: Fecha DD/MM/YY, Columna 2: Concepto/Descripción, Columna 3: Cargo (débito) con prefijo $, Columna 4: Abono (crédito) con prefijo $, Columna 5: Saldo"
 
-        // Check if we have a cached template
-        $existingTemplate = BankLayoutTemplate::findByFingerprint($fingerprint);
-        if ($existingTemplate) {
-            Log::info('Using cached bank layout template', ['fingerprint' => $fingerprint]);
+Responde SOLO el JSON, sin explicaciones.
+PROMPT;
 
-            return [
-                'parse_config' => $existingTemplate->parse_config,
-                'bank_name_guess' => $existingTemplate->bank_name_guess,
-                'fingerprint' => $fingerprint,
-                'is_cached' => true,
-            ];
-        }
+        /** @var \Gemini\Client $gemini */
+        $gemini = app('gemini');
 
-        // Detect layout using AI
-        $parseConfig = $this->detectLayoutWithAi($headers, $sampleRows);
+        $result = $gemini->generativeModel('gemini-2.0-flash')
+            ->withGenerationConfig(new GenerationConfig(
+                responseMimeType: ResponseMimeType::APPLICATION_JSON,
+            ))
+            ->generateContent([
+                $prompt,
+                new Blob(
+                    mimeType: MimeType::TEXT_CSV,
+                    data: base64_encode($sample),
+                ),
+            ]);
 
-        // Cache the template
-        BankLayoutTemplate::create([
-            'fingerprint' => $fingerprint,
-            'bank_name_guess' => $parseConfig['bank_name_guess'] ?? null,
-            'parse_config' => $parseConfig,
-        ]);
+        $parsed = json_decode(trim($result->text()), true) ?? [];
 
-        Log::info('New bank layout template detected and cached', [
-            'fingerprint' => $fingerprint,
-            'bank_name_guess' => $parseConfig['bank_name_guess'] ?? null,
+        Log::info('AI layout analysis complete', [
+            'bank_name_guess' => $parsed['bank_name_guess'] ?? 'Desconocido',
+            'header_lines_count' => $parsed['header_lines_count'] ?? 'unknown',
+            'column_description' => $parsed['column_description'] ?? 'unknown',
         ]);
 
         return [
-            'parse_config' => $parseConfig,
-            'bank_name_guess' => $parseConfig['bank_name_guess'] ?? null,
-            'fingerprint' => $fingerprint,
+            'parse_config' => $parsed,
+            'bank_name_guess' => $parsed['bank_name_guess'] ?? 'Desconocido',
+            'fingerprint' => md5($sample),
             'is_cached' => false,
         ];
     }
 
     /**
-     * Parse transactions from a file using a given configuration.
+     * Step 2: Extract transactions — uses layout info from step 1 to process in chunks.
      *
+     * @param  callable|null  $onProgress  fn(array $event): void — emits progress events
      * @return array<int, array{sequence: int, due_date: string, memo: string, debit_amount: float|null, credit_amount: float|null}>
      */
-    public function parseTransactions(UploadedFile $file, array $parseConfig): array
+    public function parseTransactions(UploadedFile $file, array $parseConfig, ?callable $onProgress = null): array
     {
-        $spreadsheet = IOFactory::load($file->getPathname());
-        $sheet = $spreadsheet->getActiveSheet();
-        $data = $sheet->toArray();
+        $rawContent = $this->readFileAsText($file);
+        $lines = explode("\n", $rawContent);
+        $totalLines = count($lines);
 
-        $dataStartRow = $parseConfig['data_start_row'] ?? 1;
-        $columns = $parseConfig['columns'];
+        $headerLinesCount = (int) ($parseConfig['header_lines_count'] ?? 0);
+        $columnDescription = $parseConfig['column_description'] ?? '';
 
-        $transactions = [];
-        $sequence = 1;
+        $chunkSize = 80;
 
-        for ($i = $dataStartRow; $i < count($data); $i++) {
-            $row = $data[$i];
+        // Skip header lines for data — only process transaction rows
+        $dataLines = array_slice($lines, $headerLinesCount);
+        $dataLineCount = count($dataLines);
+        $totalChunks = $dataLineCount <= $chunkSize + 10 ? 1 : (int) ceil($dataLineCount / $chunkSize);
 
-            // Skip empty rows
-            if ($this->isEmptyRow($row)) {
-                continue;
+        $emit = $onProgress ?? fn (array $e) => null;
+        $emit([
+            'event' => 'extraction_start',
+            'total_lines' => $totalLines,
+            'data_lines' => $dataLineCount,
+            'header_lines' => $headerLinesCount,
+            'total_chunks' => $totalChunks,
+            'column_description' => $columnDescription,
+        ]);
+
+        if ($totalChunks === 1) {
+            $emit(['event' => 'chunk_progress', 'current' => 1, 'total' => 1]);
+            $allTransactions = $this->extractChunk($rawContent, $columnDescription);
+            $emit(['event' => 'chunk_done', 'current' => 1, 'total' => 1, 'extracted' => count($allTransactions)]);
+        } else {
+            $allTransactions = [];
+
+            for ($i = 0; $i < $totalChunks; $i++) {
+                $chunk = array_slice($dataLines, $i * $chunkSize, $chunkSize);
+                $chunkContent = implode("\n", $chunk);
+                $chunkNumber = $i + 1;
+
+                $emit(['event' => 'chunk_progress', 'current' => $chunkNumber, 'total' => $totalChunks]);
+
+                Log::info("Processing chunk {$chunkNumber}/{$totalChunks}", [
+                    'lines' => count($chunk),
+                ]);
+
+                $transactions = $this->extractChunk($chunkContent, $columnDescription);
+                $allTransactions = array_merge($allTransactions, $transactions);
+
+                $emit(['event' => 'chunk_done', 'current' => $chunkNumber, 'total' => $totalChunks, 'extracted' => count($allTransactions)]);
             }
-
-            $dateValue = $row[$columns['date']['index']] ?? null;
-            $description = trim($row[$columns['description']['index']] ?? '');
-
-            // Parse date
-            $dueDate = $this->parseDate($dateValue, $columns['date']['format']);
-            if (! $dueDate) {
-                continue;
-            }
-
-            // Parse amounts
-            $debitAmount = null;
-            $creditAmount = null;
-
-            if (isset($columns['signed_amount']) && $columns['signed_amount'] !== null) {
-                $amount = $this->parseAmount($row[$columns['signed_amount']['index']] ?? null);
-                if ($amount !== null) {
-                    if ($amount < 0) {
-                        $debitAmount = abs($amount);
-                    } else {
-                        $creditAmount = $amount;
-                    }
-                }
-            } else {
-                if (isset($columns['debit'])) {
-                    $debitAmount = $this->parseAmount($row[$columns['debit']['index']] ?? null);
-                }
-                if (isset($columns['credit'])) {
-                    $creditAmount = $this->parseAmount($row[$columns['credit']['index']] ?? null);
-                }
-            }
-
-            // Skip rows without any amount
-            if ($debitAmount === null && $creditAmount === null) {
-                continue;
-            }
-
-            $transactions[] = [
-                'sequence' => $sequence++,
-                'due_date' => $dueDate->format('Y-m-d'),
-                'memo' => $description,
-                'debit_amount' => $debitAmount,
-                'credit_amount' => $creditAmount,
-            ];
         }
 
-        return $transactions;
+        // Re-sequence all transactions
+        foreach ($allTransactions as $i => &$t) {
+            $t['sequence'] = $i + 1;
+        }
+        unset($t);
+
+        Log::info('AI extracted transactions from bank statement', [
+            'count' => count($allTransactions),
+        ]);
+
+        if (empty($allTransactions)) {
+            throw new \RuntimeException('La IA no pudo extraer las transacciones del archivo.');
+        }
+
+        return $allTransactions;
     }
 
     /**
-     * Generate a fingerprint from headers.
+     * Send a content chunk to Gemini with column context and extract transactions.
+     *
+     * @return array<int, mixed>
      */
-    public function generateFingerprint(array $headers): string
+    protected function extractChunk(string $content, string $columnDescription = ''): array
     {
-        $normalized = array_map(function ($header) {
-            return strtolower(trim((string) $header));
-        }, $headers);
-
-        return md5(implode('|', $normalized));
-    }
-
-    /**
-     * Detect layout configuration using AI.
-     */
-    protected function detectLayoutWithAi(array $headers, array $sampleRows): array
-    {
-        $headersString = implode(', ', array_map(fn ($h) => '"'.($h ?? '').'"', $headers));
-        $sampleRowsJson = json_encode($sampleRows, JSON_UNESCAPED_UNICODE);
+        $contextLine = $columnDescription !== ''
+            ? "\n\nFORMATO DE COLUMNAS DEL ARCHIVO:\n{$columnDescription}\n\nUsa esta descripción para identificar correctamente cada campo."
+            : '';
 
         $prompt = <<<PROMPT
-Eres un Ingeniero de Datos experto. Tu tarea es generar una configuración JSON para parsear un archivo CSV/Excel bancario desconocido.
+Eres un experto en extractos bancarios. Extrae TODAS las transacciones de este fragmento.{$contextLine}
 
-INPUT DATA:
-Headers: {$headersString}
-Sample Rows: {$sampleRowsJson}
+REGLAS:
+1. Ignora encabezados del banco (nombre, saldos, fechas de descarga) y pies de página
+2. Extrae SOLO filas de transacciones reales (con fecha, descripción y al menos un monto)
+3. Fechas en formato YYYY-MM-DD (año de 2 dígitos "26" → "2026")
+4. Montos como números decimales positivos, sin "\$", sin comas de miles
+5. Cargo/débito → debit_amount (credit_amount = null)
+6. Abono/crédito → credit_amount (debit_amount = null)
+7. "memo" = descripción/concepto tal como aparece
+8. "sequence" = número secuencial desde 1
+9. Si no hay transacciones en este fragmento, devuelve un array vacío: []
 
-REGLAS DE DETECCIÓN CRÍTICAS:
-1. FECHAS (Date):
-   - Si los datos son números flotantes (ej: 45992.0), el formato es 'excel_serial'.
-   - Si los datos tienen comillas simples (ej: '31122025' o '01122025'), el formato es 'quoted_dmY'.
-   - Si es estándar día/mes/año (31/12/2025 o 1/12/2025), es 'standard_dmy'.
-   - Si es formato americano mes/día/año (12/31/2025), es 'standard_mdy'.
-2. MONTOS (Amounts):
-   - Detecta si hay columnas separadas para 'Cargo' (Debit) y 'Abono' (Credit).
-   - O si es una sola columna 'Monto' con signos (+/-).
-   - Los valores "  -   " o vacíos significan null (sin monto).
-   - Los montos pueden tener comas como separador de miles y espacios alrededor.
-3. DESCRIPCIÓN:
-   - Identifica la columna con el texto más descriptivo del movimiento bancario.
-   - Puede llamarse 'Descripcion', 'Concepto', 'Detalle', etc.
-
-OUTPUT JSON FORMAT (Strict - solo el JSON, sin texto adicional):
-{
-    "bank_name_guess": "String con el nombre probable del banco",
-    "header_row_index": 0,
-    "data_start_row": 1,
-    "columns": {
-        "date": { "index": 0, "format": "excel_serial|quoted_dmY|standard_dmy|standard_mdy" },
-        "description": { "index": 3 },
-        "debit": { "index": 4, "is_signed": false },
-        "credit": { "index": 5, "is_signed": false },
-        "signed_amount": null
-    }
-}
-
-Si hay una sola columna de monto con signos, usa signed_amount en lugar de debit/credit:
-{
-    "columns": {
-        "date": {...},
-        "description": {...},
-        "debit": null,
-        "credit": null,
-        "signed_amount": { "index": 4 }
-    }
-}
-
-Responde SOLO con el JSON, sin explicaciones adicionales.
+Estructura JSON compacta:
+[{"sequence":1,"due_date":"2026-02-17","memo":"Descripcion","debit_amount":100.50,"credit_amount":null}]
 PROMPT;
 
-        try {
-            /** @var GeminiClient $gemini */
-            $gemini = app('gemini');
-            $result = $gemini->generativeModel('gemini-2.0-flash')->generateContent($prompt);
-            $responseText = $result->text();
+        /** @var \Gemini\Client $gemini */
+        $gemini = app('gemini');
 
-            // Extract JSON from response
-            $responseText = trim($responseText);
-            if (str_starts_with($responseText, '```json')) {
-                $responseText = substr($responseText, 7);
-            }
-            if (str_starts_with($responseText, '```')) {
-                $responseText = substr($responseText, 3);
-            }
-            if (str_ends_with($responseText, '```')) {
-                $responseText = substr($responseText, 0, -3);
-            }
-            $responseText = trim($responseText);
-
-            $parseConfig = json_decode($responseText, true);
-
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                Log::error('Failed to parse AI response as JSON', [
-                    'response' => $responseText,
-                    'error' => json_last_error_msg(),
-                ]);
-                throw new \RuntimeException('La IA no pudo analizar el formato del archivo.');
-            }
-
-            return $parseConfig;
-
-        } catch (\Exception $e) {
-            Log::error('AI layout detection failed', ['error' => $e->getMessage()]);
-            throw new \RuntimeException('Error al detectar el formato del archivo: '.$e->getMessage());
-        }
-    }
-
-    /**
-     * Parse a date value based on format.
-     */
-    public function parseDate(mixed $value, string $format): ?Carbon
-    {
-        if ($value === null || $value === '') {
-            return null;
-        }
-
-        try {
-            switch ($format) {
-                case 'excel_serial':
-                    if (is_numeric($value)) {
-                        return Carbon::instance(ExcelDate::excelToDateTimeObject((float) $value));
-                    }
-
-                    return null;
-
-                case 'quoted_dmY':
-                    $cleaned = trim((string) $value, "' ");
-                    if (strlen($cleaned) === 8 && is_numeric($cleaned)) {
-                        return Carbon::createFromFormat('dmY', $cleaned);
-                    }
-
-                    return null;
-
-                case 'standard_dmy':
-                    $parts = explode('/', (string) $value);
-                    // Use 'y' for 2-digit years (26 → 2026), 'Y' for 4-digit years
-                    $yearFormat = (isset($parts[2]) && strlen(trim($parts[2])) <= 2) ? 'd/m/y' : 'd/m/Y';
-
-                    return Carbon::createFromFormat($yearFormat, (string) $value);
-
-                case 'standard_mdy':
-                    $parts = explode('/', (string) $value);
-                    $yearFormat = (isset($parts[2]) && strlen(trim($parts[2])) <= 2) ? 'm/d/y' : 'm/d/Y';
-
-                    return Carbon::createFromFormat($yearFormat, (string) $value);
-
-                default:
-                    return Carbon::parse((string) $value);
-            }
-        } catch (\Exception $e) {
-            Log::warning('Date parsing failed', [
-                'value' => $value,
-                'format' => $format,
-                'error' => $e->getMessage(),
+        $result = $gemini->generativeModel('gemini-2.0-flash')
+            ->withGenerationConfig(new GenerationConfig(
+                responseMimeType: ResponseMimeType::APPLICATION_JSON,
+                maxOutputTokens: 65536,
+            ))
+            ->generateContent([
+                $prompt,
+                new Blob(
+                    mimeType: MimeType::TEXT_CSV,
+                    data: base64_encode($content),
+                ),
             ]);
 
-            return null;
-        }
-    }
+        $finishReason = $result->candidates[0]->finishReason ?? null;
+        $responseText = trim($result->text());
 
-    /**
-     * Parse an amount value.
-     */
-    public function parseAmount(mixed $value): ?float
-    {
-        if ($value === null || $value === '') {
-            return null;
-        }
+        Log::info('AI chunk response', [
+            'finish_reason' => $finishReason?->value,
+            'response_length' => strlen($responseText),
+        ]);
 
-        $stringValue = trim((string) $value);
+        $decoded = json_decode($responseText, true);
 
-        // Check for empty/dash values
-        if ($stringValue === '-' || preg_match('/^\s*-\s*$/', $stringValue)) {
-            return null;
-        }
-
-        // Remove thousands separators and normalize decimal
-        $cleaned = str_replace([',', ' '], ['', ''], $stringValue);
-        $cleaned = trim($cleaned);
-
-        if ($cleaned === '' || $cleaned === '-') {
-            return null;
-        }
-
-        if (is_numeric($cleaned)) {
-            return (float) $cleaned;
-        }
-
-        return null;
-    }
-
-    /**
-     * Check if a row is empty.
-     */
-    protected function isEmptyRow(array $row): bool
-    {
-        foreach ($row as $cell) {
-            if ($cell !== null && trim((string) $cell) !== '') {
-                return false;
+        // If truncated, repair by closing the JSON array
+        if ($decoded === null && $finishReason === FinishReason::MAX_TOKENS) {
+            Log::warning('AI chunk truncated (MAX_TOKENS), repairing');
+            $lastBrace = strrpos($responseText, '}');
+            if ($lastBrace !== false) {
+                $decoded = json_decode(substr($responseText, 0, $lastBrace + 1).']', true);
             }
         }
 
-        return true;
+        // Handle wrapped object (e.g. {"transactions": [...]})
+        if (is_array($decoded) && ! isset($decoded[0]) && ! isset($decoded['sequence'])) {
+            foreach ($decoded as $value) {
+                if (is_array($value) && isset($value[0]['sequence'])) {
+                    return $value;
+                }
+            }
+        }
+
+        return is_array($decoded) ? array_values($decoded) : [];
+    }
+
+    /**
+     * Read any file as plain text. Excel → tab-separated, CSV → as-is.
+     */
+    protected function readFileAsText(UploadedFile $file): string
+    {
+        $extension = strtolower($file->getClientOriginalExtension());
+
+        if (in_array($extension, ['xlsx', 'xls'])) {
+            $spreadsheet = IOFactory::load($file->getPathname());
+            $sheet = $spreadsheet->getActiveSheet();
+            $data = $sheet->toArray();
+
+            $lines = [];
+            foreach ($data as $row) {
+                $lines[] = implode("\t", array_map(fn ($cell) => (string) ($cell ?? ''), $row));
+            }
+
+            return implode("\n", $lines);
+        }
+
+        return file_get_contents($file->getPathname());
     }
 }

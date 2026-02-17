@@ -33,15 +33,17 @@ class BankStatementService
     /**
      * Parse and classify transactions from an uploaded file.
      *
+     * @param  callable|null  $onProgress  fn(array $event): void — emits progress events for streaming
      * @return array{transactions: array, totals: array{debit: float, credit: float, count: int}}
      */
     public function parseAndClassify(
         UploadedFile $file,
         array $parseConfig,
-        Branch $branch
+        Branch $branch,
+        ?callable $onProgress = null
     ): array {
         // Parse transactions using the layout analyzer
-        $transactions = $this->layoutAnalyzer->parseTransactions($file, $parseConfig);
+        $transactions = $this->layoutAnalyzer->parseTransactions($file, $parseConfig, $onProgress);
 
         if (empty($transactions)) {
             Log::warning('No transactions parsed from file', [
@@ -53,6 +55,9 @@ class BankStatementService
                 'totals' => ['debit' => 0.0, 'credit' => 0.0, 'count' => 0],
             ];
         }
+
+        $emit = $onProgress ?? fn (array $e) => null;
+        $emit(['event' => 'classifying', 'total' => count($transactions)]);
 
         // Get chart of accounts for classification
         $chartOfAccounts = $this->classifier->getChartOfAccounts($branch);

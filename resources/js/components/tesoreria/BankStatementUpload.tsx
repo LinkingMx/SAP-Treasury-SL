@@ -73,7 +73,6 @@ const INITIAL_STEPS: ProcessStep[] = [
     { id: 'load', label: 'Cargando archivo', status: 'pending' },
     { id: 'structure', label: 'Analizando estructura con IA', status: 'pending' },
     { id: 'extract', label: 'Extrayendo transacciones', status: 'pending' },
-    { id: 'classify', label: 'Clasificando transacciones', status: 'pending' },
 ];
 
 const STEP_DELAY_MS = 600;
@@ -381,12 +380,6 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                                 setProgress(25 + Math.round((event.current / event.total) * 50));
                                 break;
 
-                            case 'classifying':
-                                updateStep(2, 'complete', `${event.total} transacciones extraidas`);
-                                updateStep(3, 'active', `Clasificando ${event.total} transacciones...`);
-                                setProgress(80);
-                                break;
-
                             case 'complete':
                                 finalData = event as ClassifyPreviewResponse & { message?: string };
                                 break;
@@ -405,8 +398,8 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                 throw new Error(finalData?.message || 'No se recibio respuesta del servidor.');
             }
 
-            // Step 4: Show preview
-            updateStep(3, 'complete');
+            // Extraction complete — show preview
+            updateStep(2, 'complete');
             setProgress(100);
 
             setTransactions(finalData.transactions.map((t) => ({

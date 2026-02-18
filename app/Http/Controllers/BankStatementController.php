@@ -74,7 +74,7 @@ class BankStatementController extends Controller
 
         $file = $request->file('file');
 
-        return response()->stream(function () use ($file, $parseConfig, $branch) {
+        return response()->stream(function () use ($file, $parseConfig) {
             $sendEvent = function (array $data) {
                 echo json_encode($data, JSON_UNESCAPED_UNICODE)."\n";
                 if (ob_get_level()) {
@@ -84,20 +84,11 @@ class BankStatementController extends Controller
             };
 
             try {
-                $result = $this->bankStatementService->parseAndClassify(
+                $result = $this->bankStatementService->parseOnly(
                     $file,
                     $parseConfig,
-                    $branch,
                     $sendEvent
                 );
-
-                // Calculate unclassified count
-                $unclassifiedCount = 0;
-                foreach ($result['transactions'] as $t) {
-                    if (empty($t['sap_account_code'])) {
-                        $unclassifiedCount++;
-                    }
-                }
 
                 $sendEvent([
                     'event' => 'complete',
@@ -107,7 +98,7 @@ class BankStatementController extends Controller
                         'total_records' => $result['totals']['count'],
                         'total_debit' => number_format($result['totals']['debit'], 2, '.', ''),
                         'total_credit' => number_format($result['totals']['credit'], 2, '.', ''),
-                        'unclassified_count' => $unclassifiedCount,
+                        'unclassified_count' => 0,
                     ],
                 ]);
             } catch (\Exception $e) {

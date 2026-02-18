@@ -31,6 +31,43 @@ class BankStatementService
     }
 
     /**
+     * Parse transactions from an uploaded file (no classification).
+     *
+     * @param  callable|null  $onProgress  fn(array $event): void — emits progress events for streaming
+     * @return array{transactions: array, totals: array{debit: float, credit: float, count: int}}
+     */
+    public function parseOnly(
+        UploadedFile $file,
+        array $parseConfig,
+        ?callable $onProgress = null
+    ): array {
+        $transactions = $this->layoutAnalyzer->parseTransactions($file, $parseConfig, $onProgress);
+
+        if (empty($transactions)) {
+            return [
+                'transactions' => [],
+                'totals' => ['debit' => 0.0, 'credit' => 0.0, 'count' => 0],
+            ];
+        }
+
+        $totalDebit = 0.0;
+        $totalCredit = 0.0;
+        foreach ($transactions as $tx) {
+            $totalDebit += $tx['debit_amount'] ?? 0.0;
+            $totalCredit += $tx['credit_amount'] ?? 0.0;
+        }
+
+        return [
+            'transactions' => $transactions,
+            'totals' => [
+                'debit' => $totalDebit,
+                'credit' => $totalCredit,
+                'count' => count($transactions),
+            ],
+        ];
+    }
+
+    /**
      * Parse and classify transactions from an uploaded file.
      *
      * @param  callable|null  $onProgress  fn(array $event): void — emits progress events for streaming

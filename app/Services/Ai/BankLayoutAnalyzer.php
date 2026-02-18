@@ -85,7 +85,8 @@ PROMPT;
 
         $chunkSize = 80;
 
-        // Skip header lines for data — only process transaction rows
+        // Keep actual header lines to prepend to each chunk as context
+        $headerContent = implode("\n", array_slice($lines, 0, $headerLinesCount));
         $dataLines = array_slice($lines, $headerLinesCount);
         $dataLineCount = count($dataLines);
         $totalChunks = $dataLineCount <= $chunkSize + 10 ? 1 : (int) ceil($dataLineCount / $chunkSize);
@@ -111,6 +112,11 @@ PROMPT;
                 $chunk = array_slice($dataLines, $i * $chunkSize, $chunkSize);
                 $chunkContent = implode("\n", $chunk);
                 $chunkNumber = $i + 1;
+
+                // Prepend real header lines so AI sees actual column names
+                if ($headerContent !== '') {
+                    $chunkContent = $headerContent."\n".$chunkContent;
+                }
 
                 $emit(['event' => 'chunk_progress', 'current' => $chunkNumber, 'total' => $totalChunks]);
 

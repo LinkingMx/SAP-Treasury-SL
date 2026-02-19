@@ -21,7 +21,7 @@ class BankStatementController extends Controller
     public function analyze(Request $request): JsonResponse
     {
         $request->validate([
-            'file' => 'required|file|mimes:xlsx,xls,csv|max:10240',
+            'file' => 'required|file|extensions:xlsx,xls,csv|max:10240',
         ]);
 
         try {
@@ -45,69 +45,74 @@ class BankStatementController extends Controller
     }
 
     /**
-     * Parse and classify transactions from a file for preview.
+     * Parse and classify transactions from a file for preview (streamed with progress).
      */
-    public function preview(Request $request): JsonResponse
+    public function preview(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
     {
-        set_time_limit(300);
-        ini_set('max_execution_time', '300');
+        set_time_limit(600);
+        ini_set('max_execution_time', '600');
 
         $request->validate([
-            'file' => 'required|file|mimes:xlsx,xls,csv|max:10240',
+            'file' => 'required|file|extensions:xlsx,xls,csv|max:10240',
             'parse_config' => 'required|string',
             'branch_id' => 'required|exists:branches,id',
         ]);
 
         $parseConfig = json_decode($request->input('parse_config'), true);
         if (json_last_error() !== JSON_ERROR_NONE || ! is_array($parseConfig)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Configuracion de parseo invalida.',
-            ], 422);
+            return response()->stream(function () {
+                echo json_encode(['event' => 'error', 'message' => 'Configuracion de parseo invalida.'])."\n";
+            }, 422, ['Content-Type' => 'application/x-ndjson']);
         }
 
-        // Verify user has access to this branch
         $branch = Branch::findOrFail($request->input('branch_id'));
         if (! $request->user()->branches()->where('branches.id', $branch->id)->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No tienes acceso a esta sucursal.',
-            ], 403);
+            return response()->stream(function () {
+                echo json_encode(['event' => 'error', 'message' => 'No tienes acceso a esta sucursal.'])."\n";
+            }, 403, ['Content-Type' => 'application/x-ndjson']);
         }
 
-        try {
-            $result = $this->bankStatementService->parseAndClassify(
-                $request->file('file'),
-                $parseConfig,
-                $branch
-            );
+        $file = $request->file('file');
 
-            // Calculate unclassified count
-            $unclassifiedCount = 0;
-            foreach ($result['transactions'] as $t) {
-                if (empty($t['sap_account_code'])) {
-                    $unclassifiedCount++;
+        return response()->stream(function () use ($file, $parseConfig) {
+            $sendEvent = function (array $data) {
+                echo json_encode($data, JSON_UNESCAPED_UNICODE)."\n";
+                if (ob_get_level()) {
+                    ob_flush();
                 }
+                flush();
+            };
+
+            try {
+                $result = $this->bankStatementService->parseOnly(
+                    $file,
+                    $parseConfig,
+                    $sendEvent
+                );
+
+                $sendEvent([
+                    'event' => 'complete',
+                    'success' => true,
+                    'transactions' => $result['transactions'],
+                    'summary' => [
+                        'total_records' => $result['totals']['count'],
+                        'total_debit' => number_format($result['totals']['debit'], 2, '.', ''),
+                        'total_credit' => number_format($result['totals']['credit'], 2, '.', ''),
+                        'unclassified_count' => 0,
+                    ],
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Bank statement preview failed', ['error' => $e->getMessage()]);
+                $sendEvent([
+                    'event' => 'error',
+                    'message' => $e->getMessage(),
+                ]);
             }
-
-            return response()->json([
-                'success' => true,
-                'transactions' => $result['transactions'],
-                'summary' => [
-                    'total_records' => $result['totals']['count'],
-                    'total_debit' => number_format($result['totals']['debit'], 2, '.', ''),
-                    'total_credit' => number_format($result['totals']['credit'], 2, '.', ''),
-                    'unclassified_count' => $unclassifiedCount,
-                ],
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Bank statement preview failed', ['error' => $e->getMessage()]);
-
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage(),
-            ], 422);
-        }
+        }, 200, [
+            'Content-Type' => 'application/x-ndjson',
+            'Cache-Control' => 'no-cache',
+            'X-Accel-Buffering' => 'no',
+        ]);
     }
 
     /**

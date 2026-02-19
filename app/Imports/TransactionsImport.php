@@ -8,6 +8,7 @@ use App\Models\Transaction;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
@@ -37,6 +38,34 @@ class TransactionsImport implements ToCollection, WithHeadingRow
 
     public function collection(Collection $rows): void
     {
+        // Log the first row to see what keys we're getting
+        if ($rows->isNotEmpty()) {
+            Log::info('Excel import - First row keys', [
+                'keys' => array_keys($rows->first()->toArray()),
+                'first_row' => $rows->first()->toArray(),
+            ]);
+        }
+
+        // Filter out completely empty rows
+        $rows = $rows->filter(function ($row) {
+            // Check if at least one non-null value exists in the row
+            return collect($row)->filter(function ($value) {
+                return $value !== null && $value !== '';
+            })->isNotEmpty();
+        });
+
+        // If no valid rows after filtering, add error
+        if ($rows->isEmpty()) {
+            $this->errors[] = [
+                'row' => 0,
+                'error' => 'El archivo no contiene filas con datos válidos',
+            ];
+
+            return;
+        }
+
+        Log::info('Excel import - Valid rows count', ['count' => $rows->count()]);
+
         // Validate all rows first
         foreach ($rows as $index => $row) {
             $rowNumber = $index + 2; // +2 because index starts at 0 and we skip header row

@@ -31,17 +31,56 @@ class BankStatementService
     }
 
     /**
+     * Parse transactions from an uploaded file (no classification).
+     *
+     * @param  callable|null  $onProgress  fn(array $event): void — emits progress events for streaming
+     * @return array{transactions: array, totals: array{debit: float, credit: float, count: int}}
+     */
+    public function parseOnly(
+        UploadedFile $file,
+        array $parseConfig,
+        ?callable $onProgress = null
+    ): array {
+        $transactions = $this->layoutAnalyzer->parseTransactions($file, $parseConfig, $onProgress);
+
+        if (empty($transactions)) {
+            return [
+                'transactions' => [],
+                'totals' => ['debit' => 0.0, 'credit' => 0.0, 'count' => 0],
+            ];
+        }
+
+        $totalDebit = 0.0;
+        $totalCredit = 0.0;
+        foreach ($transactions as $tx) {
+            $totalDebit += $tx['debit_amount'] ?? 0.0;
+            $totalCredit += $tx['credit_amount'] ?? 0.0;
+        }
+
+        return [
+            'transactions' => $transactions,
+            'totals' => [
+                'debit' => $totalDebit,
+                'credit' => $totalCredit,
+                'count' => count($transactions),
+            ],
+        ];
+    }
+
+    /**
      * Parse and classify transactions from an uploaded file.
      *
+     * @param  callable|null  $onProgress  fn(array $event): void — emits progress events for streaming
      * @return array{transactions: array, totals: array{debit: float, credit: float, count: int}}
      */
     public function parseAndClassify(
         UploadedFile $file,
         array $parseConfig,
-        Branch $branch
+        Branch $branch,
+        ?callable $onProgress = null
     ): array {
         // Parse transactions using the layout analyzer
-        $transactions = $this->layoutAnalyzer->parseTransactions($file, $parseConfig);
+        $transactions = $this->layoutAnalyzer->parseTransactions($file, $parseConfig, $onProgress);
 
         if (empty($transactions)) {
             Log::warning('No transactions parsed from file', [
@@ -53,6 +92,9 @@ class BankStatementService
                 'totals' => ['debit' => 0.0, 'credit' => 0.0, 'count' => 0],
             ];
         }
+
+        $emit = $onProgress ?? fn (array $e) => null;
+        $emit(['event' => 'classifying', 'total' => count($transactions)]);
 
         // Get chart of accounts for classification
         $chartOfAccounts = $this->classifier->getChartOfAccounts($branch);
@@ -112,6 +154,9 @@ class BankStatementService
                 $date .= 'T00:00:00Z';
             }
 
+            // Validate and fix year — 2-digit years parsed as 00XX need correction
+            $date = $this->fixDateYear($date);
+
             $debitAmount = (float) ($tx['debit_amount'] ?? 0);
             $creditAmount = (float) ($tx['credit_amount'] ?? 0);
 
@@ -119,13 +164,16 @@ class BankStatementService
             // Debit > 0 = Egreso (expense/outflow), Credit > 0 = Ingreso (income/inflow)
             $reference = $debitAmount > 0 ? 'Egreso' : 'Ingreso';
 
+            // SAP BankPage.Memo has a 254 character limit
+            $memo = mb_substr($tx['memo'] ?? $tx['raw_memo'] ?? '', 0, 254);
+
             $rows[] = [
                 'AccountCode' => $glAccountCode,
                 'DueDate' => $date,
                 'DebitAmount' => $debitAmount,
                 'CreditAmount' => $creditAmount,
                 'DocNumberType' => 'bpdt_DocNum',
-                'Memo' => $tx['memo'] ?? $tx['raw_memo'] ?? '',
+                'Memo' => $memo,
                 'Reference' => $reference,
             ];
         }
@@ -135,18 +183,25 @@ class BankStatementService
 
     /**
      * Generate a unique statement number.
-     * Format: YYYY-MM-XXX where XXX is sequential within the month.
+     * Format: YYYY-MM-XXX where XXX is sequential within the month (globally unique).
      */
     public function generateStatementNumber(int $branchId, Carbon $date): string
     {
         $yearMonth = $date->format('Y-m');
 
-        // Count existing statements for this branch in this month
-        $count = BankStatement::where('branch_id', $branchId)
-            ->where('statement_number', 'LIKE', "{$yearMonth}-%")
-            ->count();
+        // Get the highest existing sequence globally (constraint is unique across all branches)
+        $lastNumber = BankStatement::where('statement_number', 'LIKE', "{$yearMonth}-%")
+            ->orderByDesc('statement_number')
+            ->value('statement_number');
 
-        $sequence = str_pad((string) ($count + 1), 3, '0', STR_PAD_LEFT);
+        $nextSequence = 1;
+        if ($lastNumber) {
+            $parts = explode('-', $lastNumber);
+            $lastSequence = (int) end($parts);
+            $nextSequence = $lastSequence + 1;
+        }
+
+        $sequence = str_pad((string) $nextSequence, 3, '0', STR_PAD_LEFT);
 
         return "{$yearMonth}-{$sequence}";
     }
@@ -431,6 +486,27 @@ class BankStatementService
     }
 
     /**
+     * Fix dates with 2-digit years that were incorrectly parsed as 00XX.
+     * For example, 0026-02-03T00:00:00Z → 2026-02-03T00:00:00Z.
+     */
+    protected function fixDateYear(string $date): string
+    {
+        try {
+            $parsed = Carbon::parse($date);
+
+            if ($parsed->year < 100) {
+                $parsed->year += 2000;
+            }
+
+            return $parsed->format('Y-m-d\T00:00:00\Z');
+        } catch (\Exception $e) {
+            Log::warning('Could not fix date year', ['date' => $date, 'error' => $e->getMessage()]);
+
+            return $date;
+        }
+    }
+
+    /**
      * Normalize a single row to SAP BankPages format.
      *
      * @param  array  $row  The stored row data
@@ -444,8 +520,14 @@ class BankStatementService
             $dueDate .= 'T00:00:00Z';
         }
 
+        // Validate and fix year — 2-digit years parsed as 00XX need correction
+        if ($dueDate) {
+            $dueDate = $this->fixDateYear($dueDate);
+        }
+
         // Extract description - handle multiple field names
-        $description = $row['Memo'] ?? $row['PaymentReference'] ?? $row['Details'] ?? '';
+        // SAP BankPage.Memo has a 254 character limit
+        $description = mb_substr($row['Memo'] ?? $row['PaymentReference'] ?? $row['Details'] ?? '', 0, 254);
 
         // Extract amounts as floats
         $debitAmount = 0.0;

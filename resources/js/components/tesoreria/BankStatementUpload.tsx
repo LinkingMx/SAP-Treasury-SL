@@ -66,13 +66,13 @@ interface ProcessStep {
     id: string;
     label: string;
     status: ProcessStepStatus;
+    detail?: string;
 }
 
 const INITIAL_STEPS: ProcessStep[] = [
     { id: 'load', label: 'Cargando archivo', status: 'pending' },
     { id: 'structure', label: 'Analizando estructura con IA', status: 'pending' },
-    { id: 'classify', label: 'Clasificando transacciones', status: 'pending' },
-    { id: 'preview', label: 'Preparando vista previa', status: 'pending' },
+    { id: 'extract', label: 'Extrayendo transacciones', status: 'pending' },
 ];
 
 const STEP_DELAY_MS = 600;
@@ -212,9 +212,20 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
         }
     };
 
-    const updateStep = useCallback((index: number, status: ProcessStepStatus) => {
+    // Progress info state
+    const [progressInfo, setProgressInfo] = useState<{
+        bankName?: string;
+        columnDescription?: string;
+        totalChunks?: number;
+        currentChunk?: number;
+        extractedCount?: number;
+        totalLines?: number;
+        dataLines?: number;
+    }>({});
+
+    const updateStep = useCallback((index: number, status: ProcessStepStatus, detail?: string) => {
         setSteps((prev) =>
-            prev.map((step, i) => (i === index ? { ...step, status } : step))
+            prev.map((step, i) => (i === index ? { ...step, status, detail: detail ?? step.detail } : step))
         );
     }, []);
 
@@ -252,6 +263,7 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
         setTransactions([]);
         setSummary(null);
         setSendResult(null);
+        setProgressInfo({});
         resetSteps();
         handleClearFile();
     };
@@ -262,6 +274,7 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
         setStatus('analyzing');
         setProgress(5);
         setErrorMessage(null);
+        setProgressInfo({});
         resetSteps();
 
         try {
@@ -276,7 +289,7 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
             // Step 2: Analyze structure
             updateStep(0, 'complete');
             updateStep(1, 'active');
-            setProgress(25);
+            setProgress(15);
 
             const analyzeResponse = await fetch('/tesoreria/bank-statements/analyze', {
                 method: 'POST',
@@ -293,52 +306,108 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                 throw new Error(analyzeData.message || 'Error al analizar la estructura del archivo.');
             }
 
+            // Show detected bank info
+            setProgressInfo((prev) => ({
+                ...prev,
+                bankName: analyzeData.bank_name_guess,
+                columnDescription: analyzeData.parse_config?.column_description,
+            }));
+            updateStep(1, 'complete', `Banco: ${analyzeData.bank_name_guess}`);
             await delay(STEP_DELAY_MS);
 
-            // Step 3: Classify transactions
-            updateStep(1, 'complete');
+            // Step 3: Extract & classify via streaming
             updateStep(2, 'active');
             setStatus('classifying');
-            setProgress(50);
+            setProgress(25);
 
-            const classifyFormData = new FormData();
-            classifyFormData.append('file', selectedFile);
-            classifyFormData.append('parse_config', JSON.stringify(analyzeData.parse_config));
-            classifyFormData.append('branch_id', selectedBranch);
+            const previewFormData = new FormData();
+            previewFormData.append('file', selectedFile);
+            previewFormData.append('parse_config', JSON.stringify(analyzeData.parse_config));
+            previewFormData.append('branch_id', selectedBranch);
 
-            const classifyResponse = await fetch('/tesoreria/bank-statements/preview', {
+            const previewResponse = await fetch('/tesoreria/bank-statements/preview', {
                 method: 'POST',
                 headers: {
                     'X-CSRF-TOKEN': csrfToken,
-                    Accept: 'application/json',
                 },
-                body: classifyFormData,
+                body: previewFormData,
             });
 
-            const classifyData: ClassifyPreviewResponse & { message?: string } = await classifyResponse.json();
-
-            if (!classifyResponse.ok || !classifyData.success) {
-                throw new Error(classifyData.message || 'Error al clasificar las transacciones.');
+            if (!previewResponse.ok && !previewResponse.body) {
+                throw new Error('Error al conectar con el servidor.');
             }
 
-            await delay(STEP_DELAY_MS);
+            // Read NDJSON stream
+            const reader = previewResponse.body!.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let finalData: (ClassifyPreviewResponse & { message?: string }) | null = null;
 
-            // Step 4: Prepare preview
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const event = JSON.parse(line);
+
+                        switch (event.event) {
+                            case 'extraction_start':
+                                setProgressInfo((prev) => ({
+                                    ...prev,
+                                    totalChunks: event.total_chunks,
+                                    totalLines: event.total_lines,
+                                    dataLines: event.data_lines,
+                                    columnDescription: event.column_description || prev.columnDescription,
+                                }));
+                                updateStep(2, 'active', `${event.total_chunks} fragmento(s) por procesar`);
+                                break;
+
+                            case 'chunk_progress':
+                                setProgressInfo((prev) => ({ ...prev, currentChunk: event.current }));
+                                updateStep(2, 'active', `Procesando fragmento ${event.current} de ${event.total}...`);
+                                setProgress(25 + Math.round(((event.current - 1) / event.total) * 50));
+                                break;
+
+                            case 'chunk_done':
+                                setProgressInfo((prev) => ({ ...prev, extractedCount: event.extracted }));
+                                updateStep(2, 'active', `Fragmento ${event.current}/${event.total} listo (${event.extracted} transacciones)`);
+                                setProgress(25 + Math.round((event.current / event.total) * 50));
+                                break;
+
+                            case 'complete':
+                                finalData = event as ClassifyPreviewResponse & { message?: string };
+                                break;
+
+                            case 'error':
+                                throw new Error(event.message || 'Error en el procesamiento.');
+                        }
+                    } catch (parseError) {
+                        if (parseError instanceof SyntaxError) continue;
+                        throw parseError;
+                    }
+                }
+            }
+
+            if (!finalData || !finalData.success) {
+                throw new Error(finalData?.message || 'No se recibio respuesta del servidor.');
+            }
+
+            // Extraction complete — show preview
             updateStep(2, 'complete');
-            updateStep(3, 'active');
-            setProgress(90);
+            setProgress(100);
 
-            setTransactions(classifyData.transactions.map((t) => ({
+            setTransactions(finalData.transactions.map((t) => ({
                 ...t,
                 ai_suggested_account: t.sap_account_code,
                 user_modified: false,
             })));
-            setSummary(classifyData.summary);
-            await delay(STEP_DELAY_MS);
-
-            // Complete
-            updateStep(3, 'complete');
-            setProgress(100);
+            setSummary(finalData.summary);
             await delay(STEP_DELAY_MS / 2);
             setStatus('review');
 
@@ -662,38 +731,66 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                         <h3 className="text-lg font-semibold">Procesando archivo...</h3>
 
                         {/* Steps indicator */}
-                        <div className="w-full max-w-sm space-y-3">
+                        <div className="w-full max-w-md space-y-3">
                             {steps.map((step) => (
-                                <div key={step.id} className="flex items-center gap-3">
-                                    {step.status === 'complete' && (
-                                        <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
-                                    )}
-                                    {step.status === 'active' && (
-                                        <Loader2 className="h-5 w-5 text-primary animate-spin shrink-0" />
-                                    )}
-                                    {step.status === 'error' && (
-                                        <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
-                                    )}
-                                    {step.status === 'pending' && (
-                                        <Circle className="h-5 w-5 text-muted-foreground/50 shrink-0" />
-                                    )}
-                                    <span
-                                        className={cn(
-                                            'text-sm',
-                                            step.status === 'active' && 'font-medium text-foreground',
-                                            step.status === 'complete' && 'text-muted-foreground',
-                                            step.status === 'error' && 'text-amber-500',
-                                            step.status === 'pending' && 'text-muted-foreground/50'
+                                <div key={step.id} className="flex items-start gap-3">
+                                    <div className="mt-0.5">
+                                        {step.status === 'complete' && (
+                                            <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
                                         )}
-                                    >
-                                        {step.label}
-                                    </span>
+                                        {step.status === 'active' && (
+                                            <Loader2 className="h-5 w-5 text-primary animate-spin shrink-0" />
+                                        )}
+                                        {step.status === 'error' && (
+                                            <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
+                                        )}
+                                        {step.status === 'pending' && (
+                                            <Circle className="h-5 w-5 text-muted-foreground/50 shrink-0" />
+                                        )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <span
+                                            className={cn(
+                                                'text-sm',
+                                                step.status === 'active' && 'font-medium text-foreground',
+                                                step.status === 'complete' && 'text-muted-foreground',
+                                                step.status === 'error' && 'text-amber-500',
+                                                step.status === 'pending' && 'text-muted-foreground/50'
+                                            )}
+                                        >
+                                            {step.label}
+                                        </span>
+                                        {step.detail && (
+                                            <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                                                {step.detail}
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
 
-                        <Progress value={progress} className="w-64" />
-                        <p className="text-sm text-muted-foreground">{progress}%</p>
+                        <Progress value={progress} className="w-72" />
+
+                        {/* Detailed progress info */}
+                        <div className="text-center space-y-1">
+                            <p className="text-sm font-medium text-muted-foreground">{progress}%</p>
+                            {progressInfo.bankName && (
+                                <p className="text-xs text-muted-foreground">
+                                    <span className="font-medium">Banco detectado:</span> {progressInfo.bankName}
+                                </p>
+                            )}
+                            {progressInfo.extractedCount !== undefined && progressInfo.extractedCount > 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                    <span className="font-medium">{progressInfo.extractedCount}</span> transacciones extraidas
+                                </p>
+                            )}
+                            {progressInfo.totalChunks && progressInfo.totalChunks > 1 && (
+                                <p className="text-xs text-muted-foreground/70">
+                                    Archivo grande — procesando en {progressInfo.totalChunks} fragmentos
+                                </p>
+                            )}
+                        </div>
                     </div>
                 </CardContent>
             </Card>

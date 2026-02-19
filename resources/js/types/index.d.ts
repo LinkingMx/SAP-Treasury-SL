@@ -24,16 +24,10 @@ export interface Bank {
 }
 
 export interface ParseConfig {
-    bank_name_guess: string;
-    header_row_index: number;
-    data_start_row: number;
-    columns: {
-        date: { index: number; format: string };
-        description: { index: number };
-        debit: { index: number; is_signed: boolean } | null;
-        credit: { index: number; is_signed: boolean } | null;
-        signed_amount: { index: number } | null;
-    };
+    bank_name_guess?: string;
+    header_lines_count?: number;
+    column_description?: string;
+    [key: string]: unknown;
 }
 
 export interface SapAccount {

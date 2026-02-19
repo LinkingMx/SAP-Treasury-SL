@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Enums\VendorPaymentBatchStatus;
 use App\Models\VendorPaymentBatch;
+use App\Models\VendorPaymentInvoice;
 use App\Services\SapServiceLayer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -79,6 +80,7 @@ class ProcessVendorPaymentsToSapJob implements ShouldQueue
         }
 
         $hasErrors = false;
+        $bplId = $branch->sap_branch_id === 0 ? null : $branch->sap_branch_id;
 
         // Group invoices by CardCode
         $groupedInvoices = $this->batch->invoices->groupBy('card_code');
@@ -92,12 +94,38 @@ class ProcessVendorPaymentsToSapJob implements ShouldQueue
                 continue;
             }
 
-            $result = $sap->createVendorPayment($unpaidInvoices->all());
+            // Resolve DocNum → DocEntry for each invoice
+            $resolvedDocEntries = [];
+            $resolutionFailed = false;
+            foreach ($unpaidInvoices as $invoice) {
+                $resolved = $sap->resolveDocEntry($invoice->card_code, $invoice->doc_entry, $invoice->invoice_type);
+
+                if (! $resolved['success']) {
+                    VendorPaymentInvoice::where('id', $invoice->id)->update(['error' => $resolved['error']]);
+                    $resolutionFailed = true;
+                    $hasErrors = true;
+
+                    Log::warning('DocNum resolution failed', [
+                        'batch_id' => $this->batch->id,
+                        'card_code' => $invoice->card_code,
+                        'doc_num' => $invoice->doc_entry,
+                        'error' => $resolved['error'],
+                    ]);
+                } else {
+                    $resolvedDocEntries[$invoice->id] = $resolved['doc_entry'];
+                }
+            }
+
+            if ($resolutionFailed) {
+                continue;
+            }
+
+            $result = $sap->createVendorPayment($unpaidInvoices->all(), $bplId, $resolvedDocEntries);
 
             if ($result['success']) {
                 // Update all invoices in this payment with the SAP doc number
                 foreach ($unpaidInvoices as $invoice) {
-                    $invoice->update([
+                    VendorPaymentInvoice::where('id', $invoice->id)->update([
                         'sap_doc_num' => $result['doc_num'],
                         'error' => null,
                     ]);
@@ -111,7 +139,7 @@ class ProcessVendorPaymentsToSapJob implements ShouldQueue
             } else {
                 // Update all invoices in this payment with the error
                 foreach ($unpaidInvoices as $invoice) {
-                    $invoice->update([
+                    VendorPaymentInvoice::where('id', $invoice->id)->update([
                         'error' => $result['error'],
                     ]);
                 }

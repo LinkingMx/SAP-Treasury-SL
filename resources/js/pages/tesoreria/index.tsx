@@ -144,6 +144,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                 });
 
                 const response = await fetch(`/tesoreria/batches?${params}`, {
+                    credentials: 'same-origin',
                     headers: {
                         Accept: 'application/json',
                         'X-CSRF-TOKEN':
@@ -184,6 +185,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
         try {
             const response = await fetch(`/tesoreria/batches/${batchToDelete.id}`, {
                 method: 'DELETE',
+                credentials: 'same-origin',
                 headers: {
                     Accept: 'application/json',
                     'X-CSRF-TOKEN':
@@ -212,6 +214,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
         setBatchDetail(null);
         try {
             const response = await fetch(`/tesoreria/batches/${batch.id}`, {
+                credentials: 'same-origin',
                 headers: {
                     Accept: 'application/json',
                 },
@@ -239,6 +242,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
         try {
             const response = await fetch(`/tesoreria/batches/${batch.id}/process-sap`, {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: {
                     Accept: 'application/json',
                     'X-CSRF-TOKEN':
@@ -271,6 +275,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                 `/tesoreria/batches/${batchDetail.id}/transactions/${transactionId}/reprocess`,
                 {
                     method: 'POST',
+                    credentials: 'same-origin',
                     headers: {
                         Accept: 'application/json',
                         'X-CSRF-TOKEN':
@@ -392,6 +397,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
             const response = await fetch('/tesoreria/batches', {
                 method: 'POST',
                 body: formData,
+                credentials: 'same-origin',
                 headers: {
                     'X-CSRF-TOKEN':
                         document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')

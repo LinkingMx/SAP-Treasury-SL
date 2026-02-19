@@ -1,0 +1,348 @@
+{
+  "evals": [
+    {
+      "id": "eval-1-simple-crud",
+      "name": "Simple CRUD Resource",
+      "prompt": "Use devteam to build a Product catalog with Filament admin. Products should have: name, description, price, stock, category (relation), and image. Include basic CRUD operations.",
+      "expectations": [
+        {
+          "type": "file_exists",
+          "path": "planning/REQUIREMENTS.md",
+          "description": "Planning phase should create requirements document"
+        },
+        {
+          "type": "file_exists",
+          "path": "planning/ARCHITECTURE.md",
+          "description": "Planning phase should create architecture document"
+        },
+        {
+          "type": "file_exists",
+          "path": "planning/DATA_MODEL.md",
+          "description": "Planning phase should create data model document"
+        },
+        {
+          "type": "content_contains",
+          "path": "app/Models/Product.php",
+          "content": "class Product extends Model",
+          "description": "Should create Product model"
+        },
+        {
+          "type": "content_contains",
+          "path": "app/Filament/Resources/ProductResource.php",
+          "content": "class ProductResource extends Resource",
+          "description": "Should create Filament resource"
+        },
+        {
+          "type": "file_exists",
+          "path": "tests/Unit/Models/ProductTest.php",
+          "description": "Should create model tests"
+        },
+        {
+          "type": "file_exists",
+          "path": "tests/Feature/Filament/ProductResourceTest.php",
+          "description": "Should create Filament resource tests"
+        },
+        {
+          "type": "file_exists",
+          "path": "docs/api/products.md",
+          "description": "Should create API documentation"
+        },
+        {
+          "type": "checkpoint_approval",
+          "phase": "planning",
+          "description": "Should present planning results for approval"
+        },
+        {
+          "type": "checkpoint_approval",
+          "phase": "development",
+          "description": "Should present development results for approval"
+        },
+        {
+          "type": "checkpoint_approval",
+          "phase": "testing",
+          "description": "Should present testing results for approval"
+        }
+      ],
+      "tags": ["basic", "crud", "filament"],
+      "estimated_tokens": 400000,
+      "estimated_cost_usd": 20
+    },
+    {
+      "id": "eval-2-integration-cfdi",
+      "name": "Gift Card with CFDI Integration",
+      "prompt": "Use devteam to build a gift card redemption system with: card generation, QR codes, redemption API, PIN security, and CFDI 4.0 invoice generation via Facturama when cards are redeemed.",
+      "expectations": [
+        {
+          "type": "content_contains",
+          "path": "planning/ARCHITECTURE.md",
+          "content": "Facturama",
+          "description": "Should plan Facturama integration"
+        },
+        {
+          "type": "content_contains",
+          "path": "app/Services/FacturamaService.php",
+          "content": "class FacturamaService",
+          "description": "Should create Facturama service"
+        },
+        {
+          "type": "content_contains",
+          "path": "app/Services/GiftCardService.php",
+          "content": "redeemGiftCard",
+          "description": "Should implement redemption logic"
+        },
+        {
+          "type": "content_contains",
+          "path": "tests/Unit/Services/GiftCardServiceTest.php",
+          "content": "test_",
+          "description": "Should create service tests"
+        },
+        {
+          "type": "content_contains",
+          "path": "tests/Feature/Api/GiftCardApiTest.php",
+          "content": "test_can_redeem",
+          "description": "Should create API tests"
+        },
+        {
+          "type": "file_exists",
+          "path": "docs/technical/cfdi-integration.md",
+          "description": "Should document CFDI integration"
+        }
+      ],
+      "tags": ["integration", "cfdi", "api", "security"],
+      "estimated_tokens": 850000,
+      "estimated_cost_usd": 42
+    },
+    {
+      "id": "eval-3-multi-phase-approval",
+      "name": "Phase Approval Workflow",
+      "prompt": "Use devteam to build a simple Task management system (title, description, status, assigned_to). Approve each phase before proceeding.",
+      "expectations": [
+        {
+          "type": "checkpoint_approval",
+          "phase": "planning",
+          "description": "Should request approval after planning"
+        },
+        {
+          "type": "user_approval_required",
+          "phase": "planning",
+          "description": "Should wait for explicit user approval"
+        },
+        {
+          "type": "checkpoint_approval",
+          "phase": "development",
+          "description": "Should request approval after development"
+        },
+        {
+          "type": "checkpoint_approval",
+          "phase": "testing",
+          "description": "Should request approval after testing"
+        },
+        {
+          "type": "checkpoint_approval",
+          "phase": "documentation",
+          "description": "Should request approval after documentation"
+        }
+      ],
+      "tags": ["workflow", "approval", "checkpoints"],
+      "estimated_tokens": 500000,
+      "estimated_cost_usd": 25
+    },
+    {
+      "id": "eval-4-team-collaboration",
+      "name": "Agent Team Collaboration",
+      "prompt": "Use devteam to build an Invoice management system with PDF generation. Observe agent collaboration within each phase.",
+      "expectations": [
+        {
+          "type": "agent_collaboration",
+          "phase": "planning",
+          "agents": ["architect", "business", "security"],
+          "description": "Planning agents should collaborate and debate"
+        },
+        {
+          "type": "agent_collaboration",
+          "phase": "development",
+          "agents": ["backend", "frontend", "integration"],
+          "description": "Development agents should coordinate on file ownership"
+        },
+        {
+          "type": "file_ownership_respected",
+          "description": "Each agent should respect file ownership boundaries"
+        },
+        {
+          "type": "task_list_used",
+          "description": "Agents should use shared task list for coordination"
+        }
+      ],
+      "tags": ["collaboration", "agent-teams", "coordination"],
+      "estimated_tokens": 700000,
+      "estimated_cost_usd": 35
+    },
+    {
+      "id": "eval-5-cost-optimization",
+      "name": "Cost Optimization via Effort Levels",
+      "prompt": "Use devteam to build a simple Blog post system. Use HIGH effort for planning, MEDIUM for development and testing, LOW for documentation.",
+      "expectations": [
+        {
+          "type": "effort_level_used",
+          "phase": "planning",
+          "level": "high",
+          "description": "Should use HIGH effort for planning"
+        },
+        {
+          "type": "effort_level_used",
+          "phase": "development",
+          "level": "medium",
+          "description": "Should use MEDIUM effort for development"
+        },
+        {
+          "type": "effort_level_used",
+          "phase": "testing",
+          "level": "medium",
+          "description": "Should use MEDIUM effort for testing"
+        },
+        {
+          "type": "effort_level_used",
+          "phase": "documentation",
+          "level": "low",
+          "description": "Should use LOW effort for documentation"
+        },
+        {
+          "type": "token_usage_optimized",
+          "description": "Token usage should be optimized per phase"
+        }
+      ],
+      "tags": ["cost-optimization", "effort-levels"],
+      "estimated_tokens": 450000,
+      "estimated_cost_usd": 22
+    },
+    {
+      "id": "eval-6-testing-coverage",
+      "name": "Testing Coverage Quality",
+      "prompt": "Use devteam to build a User authentication system (register, login, password reset). Ensure comprehensive testing with good coverage.",
+      "expectations": [
+        {
+          "type": "file_exists",
+          "path": "tests/Unit/Models/UserTest.php",
+          "description": "Should create model tests"
+        },
+        {
+          "type": "file_exists",
+          "path": "tests/Feature/Auth/RegistrationTest.php",
+          "description": "Should create registration tests"
+        },
+        {
+          "type": "file_exists",
+          "path": "tests/Feature/Auth/LoginTest.php",
+          "description": "Should create login tests"
+        },
+        {
+          "type": "test_coverage",
+          "minimum": 80,
+          "description": "Should achieve minimum 80% code coverage"
+        },
+        {
+          "type": "content_contains",
+          "path": "TESTING_REPORT.md",
+          "content": "coverage",
+          "description": "Should report code coverage"
+        }
+      ],
+      "tags": ["testing", "coverage", "quality"],
+      "estimated_tokens": 600000,
+      "estimated_cost_usd": 30
+    },
+    {
+      "id": "eval-7-documentation-quality",
+      "name": "Documentation Completeness",
+      "prompt": "Use devteam to build an Order management system. Ensure all documentation is complete and well-structured.",
+      "expectations": [
+        {
+          "type": "file_exists",
+          "path": "docs/api/openapi.yaml",
+          "description": "Should create OpenAPI specification"
+        },
+        {
+          "type": "file_exists",
+          "path": "docs/technical/architecture.md",
+          "description": "Should document architecture"
+        },
+        {
+          "type": "file_exists",
+          "path": "docs/guides/admin-guide.md",
+          "description": "Should create admin guide"
+        },
+        {
+          "type": "file_exists",
+          "path": "README.md",
+          "description": "Should create comprehensive README"
+        },
+        {
+          "type": "file_exists",
+          "path": "DEPLOYMENT.md",
+          "description": "Should create deployment guide"
+        }
+      ],
+      "tags": ["documentation", "completeness"],
+      "estimated_tokens": 550000,
+      "estimated_cost_usd": 27
+    },
+    {
+      "id": "eval-8-error-handling",
+      "name": "Error Handling and Edge Cases",
+      "prompt": "Use devteam to build a Payment processing system with Stripe integration. Ensure proper error handling for failed payments, network issues, and edge cases.",
+      "expectations": [
+        {
+          "type": "content_contains",
+          "path": "planning/REQUIREMENTS.md",
+          "content": "error",
+          "description": "Should plan for error scenarios"
+        },
+        {
+          "type": "content_contains",
+          "path": "app/Services/PaymentService.php",
+          "content": "try",
+          "description": "Should implement try-catch error handling"
+        },
+        {
+          "type": "content_contains",
+          "path": "tests/Feature/PaymentTest.php",
+          "content": "test_.*fail",
+          "description": "Should test failure scenarios"
+        }
+      ],
+      "tags": ["error-handling", "edge-cases", "integration"],
+      "estimated_tokens": 750000,
+      "estimated_cost_usd": 37
+    }
+  ],
+  "metadata": {
+    "skill_name": "devteam",
+    "skill_version": "1.0.0",
+    "created_at": "2026-02-07",
+    "total_evals": 8,
+    "tags": [
+      "basic",
+      "crud",
+      "filament",
+      "integration",
+      "cfdi",
+      "api",
+      "security",
+      "workflow",
+      "approval",
+      "checkpoints",
+      "collaboration",
+      "agent-teams",
+      "coordination",
+      "cost-optimization",
+      "effort-levels",
+      "testing",
+      "coverage",
+      "quality",
+      "documentation",
+      "completeness",
+      "error-handling",
+      "edge-cases"
+    ]
+  }
+}

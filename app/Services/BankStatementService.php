@@ -146,6 +146,8 @@ class BankStatementService
     public function transformToSapFormat(array $transactions, string $glAccountCode): array
     {
         $rows = [];
+        $totalRows = count($transactions);
+        $padLength = max(3, strlen((string) $totalRows));
 
         foreach ($transactions as $tx) {
             // Format date with timestamp for SAP (use each transaction's date)
@@ -164,8 +166,11 @@ class BankStatementService
             // Debit > 0 = Egreso (expense/outflow), Credit > 0 = Ingreso (income/inflow)
             $reference = $debitAmount > 0 ? 'Egreso' : 'Ingreso';
 
-            // SAP BankPage.Memo has a 254 character limit
-            $memo = mb_substr($tx['memo'] ?? $tx['raw_memo'] ?? '', 0, 254);
+            // Prefix Memo with zero-padded sequence to preserve original file order in SAP
+            $sequence = str_pad((string) ($tx['sequence'] ?? 0), $padLength, '0', STR_PAD_LEFT);
+            $rawMemo = $tx['memo'] ?? $tx['raw_memo'] ?? '';
+            // SAP BankPage.Memo has a 254 character limit: [XXX] + space = padLength + 3
+            $memo = mb_substr("[{$sequence}] {$rawMemo}", 0, 254);
 
             $rows[] = [
                 'AccountCode' => $glAccountCode,

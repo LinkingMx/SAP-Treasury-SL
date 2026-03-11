@@ -491,6 +491,81 @@ class SapServiceLayer
     }
 
     /**
+     * Get Bank Pages from SAP filtered by account and date range.
+     *
+     * @return array<int, array>
+     */
+    public function getBankPages(string $accountCode, string $dateFrom, string $dateTo): array
+    {
+        if (! $this->sessionId) {
+            Log::warning('Attempted to get Bank Pages without active session');
+
+            return [];
+        }
+
+        try {
+            $pages = [];
+            $skip = 0;
+            $top = 500;
+
+            $filter = "AccountCode eq '{$accountCode}' and DueDate ge '{$dateFrom}' and DueDate le '{$dateTo}'";
+
+            do {
+                $response = Http::withoutVerifying()
+                    ->withOptions(['verify' => false])
+                    ->timeout(120)
+                    ->withCookies(['B1SESSION' => $this->sessionId], parse_url($this->baseUrl, PHP_URL_HOST))
+                    ->get("{$this->baseUrl}/BankPages", [
+                        '$filter' => $filter,
+                        '$select' => 'Sequence,AccountCode,DueDate,DebitAmount,CreditAmount,Memo,Reference',
+                        '$top' => $top,
+                        '$skip' => $skip,
+                    ]);
+
+                if (! $response->successful()) {
+                    Log::error('SAP BankPages fetch failed', [
+                        'status' => $response->status(),
+                        'error' => $response->json('error.message.value', 'Unknown error'),
+                    ]);
+                    break;
+                }
+
+                $data = $response->json();
+                $items = $data['value'] ?? [];
+
+                foreach ($items as $item) {
+                    $pages[] = [
+                        'sequence' => $item['Sequence'] ?? null,
+                        'account_code' => $item['AccountCode'] ?? '',
+                        'due_date' => $item['DueDate'] ?? '',
+                        'debit_amount' => (float) ($item['DebitAmount'] ?? 0),
+                        'credit_amount' => (float) ($item['CreditAmount'] ?? 0),
+                        'memo' => $item['Memo'] ?? '',
+                        'reference' => $item['Reference'] ?? '',
+                    ];
+                }
+
+                $skip += $top;
+            } while (count($items) === $top);
+
+            Log::info('SAP BankPages fetched', [
+                'account_code' => $accountCode,
+                'date_range' => "{$dateFrom} - {$dateTo}",
+                'count' => count($pages),
+            ]);
+
+            return $pages;
+
+        } catch (ConnectionException $e) {
+            Log::error('SAP Connection failed during BankPages fetch', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+    }
+
+    /**
      * Resolve a DocNum to DocEntry via SAP Service Layer.
      *
      * @return array{success: bool, doc_entry: int|null, error: string|null}

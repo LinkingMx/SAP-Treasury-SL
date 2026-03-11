@@ -26,6 +26,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions): void {
         // Force JSON responses for API/AJAX requests
         $exceptions->render(function (Throwable $e, Request $request) {
+            // Let Laravel handle ValidationException natively (422 responses)
+            if ($e instanceof \Illuminate\Validation\ValidationException) {
+                return null;
+            }
+
             if ($request->expectsJson() || $request->is('tesoreria/ai/*')) {
                 return response()->json([
                     'success' => false,

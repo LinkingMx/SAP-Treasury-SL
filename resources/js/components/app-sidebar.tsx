@@ -14,7 +14,7 @@ import { cargaExtracto } from '@/routes/conciliacion';
 import { sap as pagosSap } from '@/routes/pagos';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { Building2, FileSpreadsheet, FileText, Landmark, LayoutGrid, Wallet } from 'lucide-react';
+import { Building2, FileSearch, FileSpreadsheet, FileText, Landmark, LayoutGrid, Wallet } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const platformItems: NavItem[] = [
@@ -43,6 +43,11 @@ const conciliacionItems: NavItem[] = [
         title: 'Carga de Extracto Bancario',
         href: cargaExtracto(),
         icon: FileSpreadsheet,
+    },
+    {
+        title: 'Validacion en Conciliacion',
+        href: '/conciliacion/validacion',
+        icon: FileSearch,
     },
 ];
 

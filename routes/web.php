@@ -4,6 +4,7 @@ use App\Http\Controllers\AfirmeController;
 use App\Http\Controllers\AiIngestController;
 use App\Http\Controllers\BankStatementController;
 use App\Http\Controllers\BatchController;
+use App\Http\Controllers\ReconciliationController;
 use App\Models\Bank;
 use App\Models\BankAccount;
 use Illuminate\Support\Facades\Route;
@@ -70,6 +71,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
                 ->get(['id', 'branch_id', 'name', 'account', 'sap_bank_key']),
         ]);
     })->name('conciliacion.carga-extracto');
+
+    // Validacion en Conciliacion
+    Route::get('conciliacion/validacion', [ReconciliationController::class, 'index'])
+        ->name('conciliacion.validacion');
+    Route::post('conciliacion/validacion/validate', [ReconciliationController::class, 'runValidation'])
+        ->name('conciliacion.validacion.validate');
+    Route::post('conciliacion/validacion/export', [ReconciliationController::class, 'export'])
+        ->name('conciliacion.validacion.export');
 
     // Pagos a SAP
     Route::get('pagos/sap', function () {

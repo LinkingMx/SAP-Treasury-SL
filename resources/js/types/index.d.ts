@@ -212,3 +212,46 @@ export interface BankStatementHistory {
     };
     created_at: string;
 }
+
+// Reconciliation types
+export interface ReconciliationRow {
+    sequence?: number;
+    due_date: string;
+    memo: string;
+    debit_amount: number;
+    credit_amount: number;
+    reference?: string;
+    account_code?: string;
+    raw_memo?: string;
+}
+
+export interface ReconciliationMatch {
+    extracto: ReconciliationRow;
+    sap: ReconciliationRow;
+}
+
+export interface ReconciliationSummary {
+    total_extracto: number;
+    total_sap: number;
+    total_matched: number;
+    total_unmatched_extracto: number;
+    total_unmatched_sap: number;
+    sum_debit_extracto: number;
+    sum_credit_extracto: number;
+    sum_debit_sap: number;
+    sum_credit_sap: number;
+    difference_debit: number;
+    difference_credit: number;
+}
+
+export interface ReconciliationResult {
+    matched: ReconciliationMatch[];
+    unmatched_extracto: ReconciliationRow[];
+    unmatched_sap: ReconciliationRow[];
+    summary: ReconciliationSummary;
+    bank_account_name: string;
+    date_from: string;
+    date_to: string;
+    generated_at: string;
+    generated_by: string;
+}

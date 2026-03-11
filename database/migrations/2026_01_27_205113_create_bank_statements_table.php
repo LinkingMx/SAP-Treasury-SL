@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('statement_number', 50)->unique();
             $table->string('original_filename');
             $table->unsignedInteger('rows_count');
-            $table->enum('status', ['pending', 'sent', 'failed'])->default('pending');
+            $table->enum('status', ['pending', 'sent', 'failed', 'cancelled'])->default('pending');
             $table->unsignedBigInteger('sap_doc_entry')->nullable();
             $table->text('sap_error')->nullable();
             $table->json('payload')->nullable();

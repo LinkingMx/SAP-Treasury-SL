@@ -7,6 +7,7 @@ enum BankStatementStatus: string
     case Pending = 'pending';
     case Sent = 'sent';
     case Failed = 'failed';
+    case Cancelled = 'cancelled';
 
     /**
      * Get the display label for the status.
@@ -17,6 +18,7 @@ enum BankStatementStatus: string
             self::Pending => 'Pendiente',
             self::Sent => 'Enviado',
             self::Failed => 'Fallido',
+            self::Cancelled => 'Cancelado en SAP',
         };
     }
 }

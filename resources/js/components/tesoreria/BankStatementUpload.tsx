@@ -11,6 +11,16 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
@@ -54,6 +64,7 @@ import {
     RefreshCw,
     Send,
     Sparkles,
+    Trash2,
     Upload,
     X,
 } from 'lucide-react';
@@ -121,6 +132,11 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
     const [history, setHistory] = useState<BankStatementHistory[]>([]);
     const [historyLoading, setHistoryLoading] = useState(false);
     const [reprocessingId, setReprocessingId] = useState<number | null>(null);
+
+    // Delete from SAP state
+    const [deletingId, setDeletingId] = useState<number | null>(null);
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [statementToDelete, setStatementToDelete] = useState<BankStatementHistory | null>(null);
 
     // Detail modal state
     const [detailOpen, setDetailOpen] = useState(false);
@@ -482,6 +498,8 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                 return <Badge variant="default" className="bg-green-600">Enviado</Badge>;
             case 'failed':
                 return <Badge variant="destructive">Fallido</Badge>;
+            case 'cancelled':
+                return <Badge variant="outline" className="border-orange-500 text-orange-600">Cancelado en SAP</Badge>;
             default:
                 return <Badge variant="secondary">Pendiente</Badge>;
         }
@@ -541,6 +559,38 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
             setErrorMessage('Error de conexion al reprocesar.');
         } finally {
             setReprocessingId(null);
+        }
+    };
+
+    const handleDeleteFromSap = async () => {
+        if (!statementToDelete) return;
+
+        setDeleteDialogOpen(false);
+        setDeletingId(statementToDelete.id);
+
+        try {
+            const response = await fetch(`/tesoreria/bank-statements/${statementToDelete.id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    Accept: 'application/json',
+                },
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                fetchHistory(selectedBranch);
+            } else {
+                setErrorMessage(data.message || 'Error al eliminar de SAP.');
+            }
+        } catch (error) {
+            console.error('Delete from SAP error:', error);
+            setErrorMessage('Error de conexion al eliminar de SAP.');
+        } finally {
+            setDeletingId(null);
+            setStatementToDelete(null);
         }
     };
 
@@ -1022,6 +1072,25 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                                                                 )}
                                                             </Button>
                                                         )}
+                                                        {(item.status === 'sent' || item.status === 'failed') && (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => {
+                                                                    setStatementToDelete(item);
+                                                                    setDeleteDialogOpen(true);
+                                                                }}
+                                                                disabled={deletingId === item.id}
+                                                                title="Eliminar de SAP"
+                                                                className="text-red-500 hover:text-red-700"
+                                                            >
+                                                                {deletingId === item.id ? (
+                                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                                ) : (
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                )}
+                                                            </Button>
+                                                        )}
                                                     </div>
                                                 </TableCell>
                                             </TableRow>
@@ -1079,6 +1148,17 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                                     <AlertCircle className="h-4 w-4" />
                                     <AlertTitle>Error de SAP</AlertTitle>
                                     <AlertDescription>{detailData.sap_error}</AlertDescription>
+                                </Alert>
+                            )}
+
+                            {/* Cancelled indicator */}
+                            {detailData.status === 'cancelled' && (
+                                <Alert className="border-orange-500 text-orange-700 dark:text-orange-400">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <AlertTitle>Cancelado en SAP</AlertTitle>
+                                    <AlertDescription>
+                                        Los movimientos de este extracto fueron eliminados de SAP.
+                                    </AlertDescription>
                                 </Alert>
                             )}
 
@@ -1161,6 +1241,30 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                     ) : null}
                 </DialogContent>
             </Dialog>
+
+            {/* Delete Confirmation Dialog */}
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Eliminar extracto de SAP</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Esta accion eliminara los movimientos bancarios de SAP para el extracto{' '}
+                            <strong>{statementToDelete?.statement_number}</strong> ({statementToDelete?.original_filename}).
+                            El registro local se marcara como &quot;Cancelado en SAP&quot;.
+                            Esta accion no se puede deshacer.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDeleteFromSap}
+                            className="bg-red-600 hover:bg-red-700"
+                        >
+                            Eliminar de SAP
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

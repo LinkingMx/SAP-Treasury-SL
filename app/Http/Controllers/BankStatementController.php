@@ -299,6 +299,87 @@ class BankStatementController extends Controller
     }
 
     /**
+     * Delete bank statement BankPages from SAP and mark as cancelled.
+     */
+    public function destroy(Request $request, int $bankStatementId): JsonResponse
+    {
+        set_time_limit(300);
+        ini_set('max_execution_time', '300');
+
+        $bankStatement = \App\Models\BankStatement::with('branch')->findOrFail($bankStatementId);
+
+        // Verify user has access
+        if (! $request->user()->branches()->where('branches.id', $bankStatement->branch_id)->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No tienes acceso a esta sucursal.',
+            ], 403);
+        }
+
+        // Collect all sap_sequences from payload
+        $bankPages = $bankStatement->payload['BankPages'] ?? [];
+        $sequences = collect($bankPages)
+            ->pluck('sap_sequence')
+            ->filter()
+            ->values()
+            ->all();
+
+        if (empty($sequences)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No hay movimientos con secuencia SAP para eliminar.',
+            ], 422);
+        }
+
+        $sap = app(\App\Services\SapServiceLayer::class);
+
+        try {
+            $loggedIn = $sap->login($bankStatement->branch->sap_database);
+            if (! $loggedIn) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No se pudo iniciar sesion en SAP.',
+                ], 500);
+            }
+
+            $result = $sap->deleteBankPages($sequences);
+            $sap->logout();
+
+            // Update status to cancelled
+            $bankStatement->update([
+                'status' => \App\Enums\BankStatementStatus::Cancelled,
+            ]);
+
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'message' => "Se eliminaron {$result['deleted_count']} movimientos de SAP.",
+                    'deleted_count' => $result['deleted_count'],
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "Se eliminaron {$result['deleted_count']} de ".count($sequences)." movimientos. {$result['failed_count']} fallaron.",
+                'deleted_count' => $result['deleted_count'],
+                'failed_count' => $result['failed_count'],
+                'errors' => $result['errors'],
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Bank statement SAP deletion failed', [
+                'bank_statement_id' => $bankStatementId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al eliminar de SAP: '.$e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Get bank statement history for a branch.
      */
     public function history(Request $request): JsonResponse

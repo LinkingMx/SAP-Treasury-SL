@@ -491,6 +491,87 @@ class SapServiceLayer
     }
 
     /**
+     * Delete a BankPage from SAP by its Sequence number.
+     *
+     * @return array{success: bool, error: string|null}
+     */
+    public function deleteBankPage(int $sequence): array
+    {
+        if (! $this->sessionId) {
+            return ['success' => false, 'error' => 'Not logged in to SAP Service Layer'];
+        }
+
+        try {
+            $response = Http::withoutVerifying()
+                ->withOptions(['verify' => false])
+                ->timeout(30)
+                ->withCookies(['B1SESSION' => $this->sessionId], parse_url($this->baseUrl, PHP_URL_HOST))
+                ->delete("{$this->baseUrl}/BankPages({$sequence})");
+
+            if ($response->successful() || $response->status() === 204) {
+                Log::debug('SAP BankPage deleted', ['sequence' => $sequence]);
+
+                return ['success' => true, 'error' => null];
+            }
+
+            $errorMessage = $response->json('error.message.value', 'Unknown SAP error');
+            Log::error('SAP BankPage deletion failed', [
+                'sequence' => $sequence,
+                'status' => $response->status(),
+                'error' => $errorMessage,
+            ]);
+
+            return ['success' => false, 'error' => $errorMessage];
+
+        } catch (ConnectionException $e) {
+            Log::error('SAP Connection failed during BankPage deletion', [
+                'sequence' => $sequence,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ['success' => false, 'error' => 'Connection error: '.$e->getMessage()];
+        }
+    }
+
+    /**
+     * Delete multiple BankPages from SAP.
+     *
+     * @param  array<int>  $sequences
+     * @return array{success: bool, deleted_count: int, failed_count: int, errors: array}
+     */
+    public function deleteBankPages(array $sequences): array
+    {
+        $deletedCount = 0;
+        $failedCount = 0;
+        $errors = [];
+
+        Log::info('SAP BankPages batch delete start', ['count' => count($sequences)]);
+
+        foreach ($sequences as $sequence) {
+            $result = $this->deleteBankPage($sequence);
+
+            if ($result['success']) {
+                $deletedCount++;
+            } else {
+                $failedCount++;
+                $errors[] = "Sequence {$sequence}: {$result['error']}";
+            }
+        }
+
+        Log::info('SAP BankPages batch delete complete', [
+            'deleted' => $deletedCount,
+            'failed' => $failedCount,
+        ]);
+
+        return [
+            'success' => $failedCount === 0,
+            'deleted_count' => $deletedCount,
+            'failed_count' => $failedCount,
+            'errors' => $errors,
+        ];
+    }
+
+    /**
      * Get Bank Pages from SAP filtered by account and date range.
      *
      * @return array<int, array>

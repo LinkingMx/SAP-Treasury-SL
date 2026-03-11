@@ -54,6 +54,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('history', [BankStatementController::class, 'history'])->name('history');
         Route::get('{bankStatement}', [BankStatementController::class, 'show'])->name('show');
         Route::post('{bankStatement}/reprocess', [BankStatementController::class, 'reprocess'])->name('reprocess');
+        Route::delete('{bankStatement}', [BankStatementController::class, 'destroy'])->name('destroy');
     });
 
     // Afirme Integration

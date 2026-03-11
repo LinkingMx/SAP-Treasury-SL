@@ -58,7 +58,11 @@ class VendorPaymentController extends Controller
         $request->validate([
             'branch_id' => 'required|exists:branches,id',
             'bank_account_id' => 'required|exists:bank_accounts,id',
+            'process_date' => 'required|date',
             'file' => 'required|file|mimes:xlsx,xls|max:10240',
+        ], [
+            'process_date.required' => 'La fecha de proceso es obligatoria.',
+            'process_date.date' => 'La fecha de proceso no es valida.',
         ]);
 
         $file = $request->file('file');
@@ -68,7 +72,8 @@ class VendorPaymentController extends Controller
             branchId: $request->branch_id,
             bankAccountId: $request->bank_account_id,
             userId: auth()->id(),
-            filename: $filename
+            filename: $filename,
+            processDate: $request->input('process_date')
         );
 
         try {

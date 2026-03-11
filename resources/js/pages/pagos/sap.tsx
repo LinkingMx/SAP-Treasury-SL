@@ -87,6 +87,7 @@ type UploadStatus = 'idle' | 'validating' | 'processing' | 'success' | 'error';
 export default function PagosSap({ branches, bankAccounts }: Props) {
     const [selectedBranch, setSelectedBranch] = useState<string>('');
     const [selectedBankAccount, setSelectedBankAccount] = useState<string>('');
+    const [processDate, setProcessDate] = useState<string>('');
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadStatus, setUploadStatus] = useState<UploadStatus>('idle');
@@ -352,7 +353,7 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
     };
 
     const handleUpload = async () => {
-        if (!selectedBranch || !selectedBankAccount || !selectedFile) return;
+        if (!selectedBranch || !selectedBankAccount || !processDate || !selectedFile) return;
 
         setIsUploading(true);
         setErrors([]);
@@ -363,6 +364,7 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
         const formData = new FormData();
         formData.append('branch_id', selectedBranch);
         formData.append('bank_account_id', selectedBankAccount);
+        formData.append('process_date', processDate);
         formData.append('file', selectedFile);
 
         try {
@@ -452,7 +454,7 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
         document.body.removeChild(form);
     };
 
-    const canUpload = selectedBranch && selectedBankAccount && selectedFile && !isUploading;
+    const canUpload = selectedBranch && selectedBankAccount && processDate && selectedFile && !isUploading;
 
     const getStatusMessage = (): string => {
         switch (uploadStatus) {
@@ -511,7 +513,7 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
                     </CardHeader>
                     <CardContent className="space-y-6">
                         {/* Selects Row */}
-                        <div className="grid gap-4 md:grid-cols-2">
+                        <div className="grid gap-4 md:grid-cols-3">
                             <div className="grid gap-2">
                                 <Label htmlFor="branch">Sucursal</Label>
                                 <Select value={selectedBranch} onValueChange={handleBranchChange}>
@@ -545,6 +547,17 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
                                         ))}
                                     </SelectContent>
                                 </Select>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="processDate">Fecha de Proceso</Label>
+                                <input
+                                    id="processDate"
+                                    type="date"
+                                    value={processDate}
+                                    onChange={(e) => setProcessDate(e.target.value)}
+                                    disabled={!selectedBankAccount}
+                                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                />
                             </div>
                         </div>
 

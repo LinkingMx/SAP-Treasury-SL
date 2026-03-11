@@ -16,6 +16,7 @@ class VendorPaymentBatch extends Model
         'bank_account_id',
         'user_id',
         'filename',
+        'process_date',
         'total_invoices',
         'total_payments',
         'total_amount',
@@ -30,6 +31,7 @@ class VendorPaymentBatch extends Model
             'total_invoices' => 'integer',
             'total_payments' => 'integer',
             'total_amount' => 'decimal:2',
+            'process_date' => 'date',
             'status' => VendorPaymentBatchStatus::class,
             'processed_at' => 'datetime',
         ];

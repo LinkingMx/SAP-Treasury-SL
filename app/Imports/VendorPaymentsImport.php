@@ -22,7 +22,8 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
         protected int $branchId,
         protected int $bankAccountId,
         protected int $userId,
-        protected string $filename
+        protected string $filename,
+        protected string $processDate
     ) {}
 
     /**
@@ -73,6 +74,7 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
                 'bank_account_id' => $this->bankAccountId,
                 'user_id' => $this->userId,
                 'filename' => $this->filename,
+                'process_date' => $this->processDate,
                 'total_invoices' => $totalInvoices,
                 'total_payments' => $totalPayments,
                 'total_amount' => $totalAmount,
@@ -87,12 +89,14 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
                 foreach ($vendorRows as $row) {
                     $rowArray = $row->toArray();
 
+                    $processDateCarbon = Carbon::parse($this->processDate);
+
                     VendorPaymentInvoice::create([
                         'batch_id' => $this->batch->id,
                         'card_code' => $rowArray['cardcode'],
                         'card_name' => $rowArray['cardname'] ?? null,
-                        'doc_date' => $this->parseDate($rowArray['docdate_fecha_pago']),
-                        'transfer_date' => $this->parseDate($rowArray['transferdate']),
+                        'doc_date' => $processDateCarbon,
+                        'transfer_date' => $processDateCarbon,
                         'transfer_account' => $rowArray['transferaccount'],
                         'line_num' => $lineNum++, // Auto-assign LineNum
                         'doc_entry' => (int) $rowArray['docnum'],
@@ -109,8 +113,8 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
         $validator = Validator::make($row, [
             'cardcode' => ['required', 'string', 'max:50'],
             'cardname' => ['nullable', 'string'],
-            'docdate_fecha_pago' => ['required'],
-            'transferdate' => ['required'],
+            'docdate_fecha_pago' => ['nullable'],
+            'transferdate' => ['nullable'],
             'transferaccount' => ['required', 'string', 'max:50'],
             'docnum' => ['required', 'integer'],
             'invoicetype' => ['nullable', 'string', 'max:50'],
@@ -137,47 +141,16 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
             }
         }
 
-        // Validate date formats
-        if (isset($row['docdate_fecha_pago']) && ! $this->isValidDate($row['docdate_fecha_pago'])) {
-            $this->errors[] = [
-                'row' => $rowNumber,
-                'error' => 'El formato de la fecha del documento es inválido',
-            ];
-        }
-
-        if (isset($row['transferdate']) && ! $this->isValidDate($row['transferdate'])) {
-            $this->errors[] = [
-                'row' => $rowNumber,
-                'error' => 'El formato de la fecha de transferencia es inválido',
-            ];
-        }
+        // Template dates are ignored - process_date from UI is used instead
     }
 
     protected function validateVendorGroup(string $cardCode, Collection $vendorRows): void
     {
-        // Validate that all rows for the same vendor have consistent data
+        // Validate that all rows for the same vendor have consistent transfer account
         $firstRow = $vendorRows->first();
-        $docDate = $this->parseDate($firstRow['docdate_fecha_pago']);
-        $transferDate = $this->parseDate($firstRow['transferdate']);
         $transferAccount = $firstRow['transferaccount'];
 
         foreach ($vendorRows as $row) {
-            if ($this->parseDate($row['docdate_fecha_pago'])->format('Y-m-d') !== $docDate->format('Y-m-d')) {
-                $this->errors[] = [
-                    'row' => 0,
-                    'error' => "Todas las facturas del proveedor {$cardCode} deben tener la misma fecha de documento",
-                ];
-                break;
-            }
-
-            if ($this->parseDate($row['transferdate'])->format('Y-m-d') !== $transferDate->format('Y-m-d')) {
-                $this->errors[] = [
-                    'row' => 0,
-                    'error' => "Todas las facturas del proveedor {$cardCode} deben tener la misma fecha de transferencia",
-                ];
-                break;
-            }
-
             if ($row['transferaccount'] !== $transferAccount) {
                 $this->errors[] = [
                     'row' => 0,

@@ -87,7 +87,7 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
                 $lineNum = 0;
 
                 foreach ($vendorRows as $row) {
-                    $rowArray = $row->toArray();
+                    $rowArray = $this->normalizeRow($row->toArray());
 
                     $processDateCarbon = Carbon::parse($this->processDate);
 
@@ -108,8 +108,24 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
         });
     }
 
+    /**
+     * Normalize row data types (Excel may parse numeric values as int/float).
+     */
+    protected function normalizeRow(array $row): array
+    {
+        foreach (['cardcode', 'cardname', 'transferaccount', 'invoicetype'] as $field) {
+            if (isset($row[$field]) && ! is_string($row[$field])) {
+                $row[$field] = (string) $row[$field];
+            }
+        }
+
+        return $row;
+    }
+
     protected function validateRow(array $row, int $rowNumber): void
     {
+        $row = $this->normalizeRow($row);
+
         $validator = Validator::make($row, [
             'cardcode' => ['required', 'string', 'max:50'],
             'cardname' => ['nullable', 'string'],
@@ -121,6 +137,7 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
             'sumapplied' => ['required', 'numeric', 'gt:0'],
         ], [
             'cardcode.required' => 'El código del proveedor es requerido',
+            'cardcode.string' => 'El código del proveedor debe ser texto',
             'cardcode.max' => 'El código del proveedor no debe exceder 50 caracteres',
             'docdate_fecha_pago.required' => 'La fecha del documento es requerida',
             'transferdate.required' => 'La fecha de transferencia es requerida',

@@ -123,14 +123,16 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
     }, [selectedBranch, bankAccounts]);
 
     const fetchBatches = useCallback(
-        async (page = 1) => {
+        async (page = 1, silent = false) => {
             if (!selectedBranch || !selectedBankAccount) {
                 setBatches([]);
                 setBatchesPagination({ currentPage: 1, lastPage: 1, total: 0 });
                 return;
             }
 
-            setBatchesLoading(true);
+            if (!silent) {
+                setBatchesLoading(true);
+            }
             try {
                 const params = new URLSearchParams({
                     branch_id: selectedBranch,
@@ -160,17 +162,36 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
                 });
             } catch (error) {
                 console.error('Error fetching batches:', error);
-                setBatches([]);
+                if (!silent) {
+                    setBatches([]);
+                }
             } finally {
-                setBatchesLoading(false);
+                if (!silent) {
+                    setBatchesLoading(false);
+                }
             }
         },
         [selectedBranch, selectedBankAccount]
     );
 
+    const hasProcessingBatches = useMemo(
+        () => batches.some((batch) => batch.status === 'processing'),
+        [batches],
+    );
+
     useEffect(() => {
         fetchBatches(1);
     }, [fetchBatches]);
+
+    useEffect(() => {
+        if (!hasProcessingBatches) return;
+
+        const intervalId = setInterval(() => {
+            fetchBatches(batchesPagination.currentPage, true);
+        }, 5000);
+
+        return () => clearInterval(intervalId);
+    }, [hasProcessingBatches, fetchBatches, batchesPagination.currentPage]);
 
     const handleDeleteBatch = async () => {
         if (!batchToDelete) return;
@@ -737,7 +758,12 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
                 {/* Batches Section */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Lotes de Pagos</CardTitle>
+                        <CardTitle className="flex items-center gap-2">
+                            Lotes de Pagos
+                            {hasProcessingBatches && (
+                                <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                            )}
+                        </CardTitle>
                         <CardDescription>
                             Historial de lotes procesados para la sucursal y cuenta seleccionadas
                         </CardDescription>
@@ -783,7 +809,11 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
                                                 <TableCell>
                                                     <Badge
                                                         variant={batch.status === 'failed' ? 'destructive' : 'default'}
+                                                        className={batch.status === 'processing' ? 'animate-pulse' : ''}
                                                     >
+                                                        {batch.status === 'processing' && (
+                                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                                        )}
                                                         {getStatusLabel(batch.status)}
                                                     </Badge>
                                                 </TableCell>

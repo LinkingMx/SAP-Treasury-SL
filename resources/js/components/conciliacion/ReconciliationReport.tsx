@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+    type AccountBalances,
     type ReconciliationMatch,
     type ReconciliationResult,
     type ReconciliationRow,
@@ -31,11 +32,15 @@ import {
     CheckCircle2,
     ChevronLeft,
     ChevronRight,
+    DollarSign,
     Download,
     FileSpreadsheet,
     Landmark,
     RefreshCw,
+    TrendingDown,
+    TrendingUp,
     User,
+    Wallet,
     Calendar,
     Clock,
 } from 'lucide-react';
@@ -245,6 +250,55 @@ export default function ReconciliationReport({ result, onNewValidation, csrfToke
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Account Balances */}
+            {result.balances && (
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                            <Wallet className="h-4 w-4 text-primary" />
+                            Saldos de Cuenta SAP
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                            <div className="rounded-lg border p-4">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm text-muted-foreground">Saldo Inicial</p>
+                                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                                </div>
+                                <p className="mt-1 text-xl font-bold">{formatCurrency(result.balances.opening_balance)}</p>
+                                <p className="text-xs text-muted-foreground">Al {formatDate(result.date_from)}</p>
+                            </div>
+                            <div className="rounded-lg border p-4">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm text-muted-foreground">Neto del Periodo</p>
+                                    {result.balances.period_net >= 0 ? (
+                                        <TrendingUp className="h-4 w-4 text-green-500" />
+                                    ) : (
+                                        <TrendingDown className="h-4 w-4 text-red-500" />
+                                    )}
+                                </div>
+                                <p className={`mt-1 text-xl font-bold ${result.balances.period_net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                    {formatCurrency(result.balances.period_net)}
+                                </p>
+                                <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                                    <p>Debitos: {formatCurrency(result.balances.period_debit)}</p>
+                                    <p>Creditos: {formatCurrency(result.balances.period_credit)}</p>
+                                </div>
+                            </div>
+                            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-sm font-medium text-muted-foreground">Saldo Final</p>
+                                    <Wallet className="h-4 w-4 text-primary" />
+                                </div>
+                                <p className="mt-1 text-xl font-bold text-primary">{formatCurrency(result.balances.closing_balance)}</p>
+                                <p className="text-xs text-muted-foreground">Al {formatDate(result.date_to)}</p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Tabs with tables */}
             <Card>

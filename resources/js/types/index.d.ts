@@ -244,11 +244,20 @@ export interface ReconciliationSummary {
     difference_credit: number;
 }
 
+export interface AccountBalances {
+    opening_balance: number;
+    period_debit: number;
+    period_credit: number;
+    period_net: number;
+    closing_balance: number;
+}
+
 export interface ReconciliationResult {
     matched: ReconciliationMatch[];
     unmatched_extracto: ReconciliationRow[];
     unmatched_sap: ReconciliationRow[];
     summary: ReconciliationSummary;
+    balances: AccountBalances | null;
     branch_name: string;
     bank_account_name: string;
     date_from: string;

@@ -6,6 +6,7 @@ use App\Models\BankAccount;
 use App\Models\Branch;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ReconciliationService
@@ -75,9 +76,68 @@ class ReconciliationService
         $emit(['event' => 'step', 'step' => 4, 'message' => 'Ejecutando algoritmo de conciliacion...']);
         $result = $this->reconcile($extractoRows, $sapRows);
 
-        $emit(['event' => 'step', 'step' => 5, 'message' => 'Conciliacion completada.']);
+        // Step 5: Query account balance from SAP SQL
+        $emit(['event' => 'step', 'step' => 5, 'message' => 'Consultando saldos de cuenta en SAP...']);
+        $balances = $this->getAccountBalance($branch, $bankAccount->account, $dateFrom, $dateTo);
+
+        $result['balances'] = $balances;
+
+        $emit(['event' => 'step', 'step' => 6, 'message' => 'Conciliacion completada.']);
 
         return $result;
+    }
+
+    /**
+     * Get account balance from SAP SQL Server (JDT1 journal entry lines).
+     *
+     * @return array{opening_balance: float, period_debit: float, period_credit: float, period_net: float, closing_balance: float}
+     */
+    private function getAccountBalance(Branch $branch, string $accountCode, string $dateFrom, string $dateTo): array
+    {
+        try {
+            config(['database.connections.sap_sqlsrv.database' => $branch->sap_database]);
+            DB::purge('sap_sqlsrv');
+
+            $opening = DB::connection('sap_sqlsrv')
+                ->table('JDT1')
+                ->where('Account', $accountCode)
+                ->where('RefDate', '<', $dateFrom)
+                ->selectRaw('ISNULL(SUM(Debit), 0) as total_debit, ISNULL(SUM(Credit), 0) as total_credit')
+                ->first();
+
+            $period = DB::connection('sap_sqlsrv')
+                ->table('JDT1')
+                ->where('Account', $accountCode)
+                ->whereBetween('RefDate', [$dateFrom, $dateTo])
+                ->selectRaw('ISNULL(SUM(Debit), 0) as total_debit, ISNULL(SUM(Credit), 0) as total_credit')
+                ->first();
+
+            $openingBalance = round((float) $opening->total_debit - (float) $opening->total_credit, 2);
+            $periodDebit = round((float) $period->total_debit, 2);
+            $periodCredit = round((float) $period->total_credit, 2);
+            $periodNet = round($periodDebit - $periodCredit, 2);
+
+            return [
+                'opening_balance' => $openingBalance,
+                'period_debit' => $periodDebit,
+                'period_credit' => $periodCredit,
+                'period_net' => $periodNet,
+                'closing_balance' => round($openingBalance + $periodNet, 2),
+            ];
+        } catch (\Exception $e) {
+            Log::warning('Could not fetch SAP account balance', [
+                'account' => $accountCode,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'opening_balance' => 0,
+                'period_debit' => 0,
+                'period_credit' => 0,
+                'period_net' => 0,
+                'closing_balance' => 0,
+            ];
+        }
     }
 
     /**

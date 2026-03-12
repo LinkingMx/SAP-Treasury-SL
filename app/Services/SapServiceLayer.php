@@ -587,7 +587,7 @@ class SapServiceLayer
         try {
             $pages = [];
             $skip = 0;
-            $top = 500;
+            $top = 20; // SAP Service Layer enforces max 20 per page regardless of $top
 
             $filter = "AccountCode eq '{$accountCode}' and DueDate ge '{$dateFrom}' and DueDate le '{$dateTo}'";
 
@@ -596,10 +596,10 @@ class SapServiceLayer
                     ->withOptions(['verify' => false])
                     ->timeout(120)
                     ->withCookies(['B1SESSION' => $this->sessionId], parse_url($this->baseUrl, PHP_URL_HOST))
+                    ->withHeaders(['Prefer' => "odata.maxpagesize={$top}"])
                     ->get("{$this->baseUrl}/BankPages", [
                         '$filter' => $filter,
                         '$select' => 'Sequence,AccountCode,DueDate,DebitAmount,CreditAmount,Memo,Reference',
-                        '$top' => $top,
                         '$skip' => $skip,
                     ]);
 
@@ -626,8 +626,9 @@ class SapServiceLayer
                     ];
                 }
 
-                $skip += $top;
-            } while (count($items) === $top);
+                $hasNextPage = isset($data['odata.nextLink']) || isset($data['@odata.nextLink']);
+                $skip += count($items);
+            } while ($hasNextPage && count($items) > 0);
 
             Log::info('SAP BankPages fetched', [
                 'account_code' => $accountCode,

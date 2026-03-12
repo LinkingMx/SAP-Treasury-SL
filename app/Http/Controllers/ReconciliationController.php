@@ -119,6 +119,7 @@ class ReconciliationController extends Controller
                         'unmatched_extracto' => $result['unmatched_extracto'],
                         'unmatched_sap' => $result['unmatched_sap'],
                         'summary' => $result['summary'],
+                        'branch_name' => $branch->name,
                         'bank_account_name' => $bankAccount->name.' ('.$bankAccount->account.')',
                         'date_from' => $dateFrom,
                         'date_to' => $dateTo,

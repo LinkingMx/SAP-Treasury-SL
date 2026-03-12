@@ -3,6 +3,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import {
     Table,
     TableBody,
     TableCell,
@@ -20,7 +27,10 @@ import {
     AlertTriangle,
     ArrowDownCircle,
     ArrowUpCircle,
+    Building2,
     CheckCircle2,
+    ChevronLeft,
+    ChevronRight,
     Download,
     FileSpreadsheet,
     Landmark,
@@ -29,6 +39,9 @@ import {
     Calendar,
     Clock,
 } from 'lucide-react';
+
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
+const DEFAULT_PAGE_SIZE = 50;
 
 interface Props {
     result: ReconciliationResult;
@@ -124,7 +137,14 @@ export default function ReconciliationReport({ result, onNewValidation, csrfToke
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                        <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                                <p className="text-xs text-muted-foreground">Sucursal</p>
+                                <p className="text-sm font-medium">{result.branch_name}</p>
+                            </div>
+                        </div>
                         <div className="flex items-center gap-2">
                             <Landmark className="h-4 w-4 text-muted-foreground" />
                             <div>
@@ -287,7 +307,60 @@ export default function ReconciliationReport({ result, onNewValidation, csrfToke
     );
 }
 
+function TablePagination({
+    page,
+    pageSize,
+    total,
+    onPageChange,
+    onPageSizeChange,
+}: {
+    page: number;
+    pageSize: number;
+    total: number;
+    onPageChange: (page: number) => void;
+    onPageSizeChange: (size: number) => void;
+}) {
+    const totalPages = Math.ceil(total / pageSize);
+    const from = (page - 1) * pageSize + 1;
+    const to = Math.min(page * pageSize, total);
+
+    if (total <= PAGE_SIZE_OPTIONS[0]) return null;
+
+    return (
+        <div className="flex items-center justify-between border-t px-4 py-3">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Mostrando {from}-{to} de {total}</span>
+                <Select value={String(pageSize)} onValueChange={(v) => { onPageSizeChange(Number(v)); onPageChange(1); }}>
+                    <SelectTrigger className="h-8 w-[70px]">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {PAGE_SIZE_OPTIONS.map((size) => (
+                            <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <span>por pagina</span>
+            </div>
+            <div className="flex items-center gap-1">
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
+                    <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="px-2 text-sm text-muted-foreground">
+                    {page} / {totalPages}
+                </span>
+                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
+                    <ChevronRight className="h-4 w-4" />
+                </Button>
+            </div>
+        </div>
+    );
+}
+
 function MatchedTable({ matches }: { matches: ReconciliationMatch[] }) {
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+
     if (matches.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
@@ -296,6 +369,8 @@ function MatchedTable({ matches }: { matches: ReconciliationMatch[] }) {
             </div>
         );
     }
+
+    const paged = matches.slice((page - 1) * pageSize, page * pageSize);
 
     return (
         <div className="overflow-auto rounded-md border">
@@ -311,10 +386,10 @@ function MatchedTable({ matches }: { matches: ReconciliationMatch[] }) {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {matches.map((match, index) => (
-                        <TableRow key={index}>
+                    {paged.map((match, index) => (
+                        <TableRow key={(page - 1) * pageSize + index}>
                             <TableCell className="text-center text-muted-foreground">
-                                {index + 1}
+                                {(page - 1) * pageSize + index + 1}
                             </TableCell>
                             <TableCell className="whitespace-nowrap">
                                 {formatDate(match.extracto.due_date)}
@@ -335,6 +410,7 @@ function MatchedTable({ matches }: { matches: ReconciliationMatch[] }) {
                     ))}
                 </TableBody>
             </Table>
+            <TablePagination page={page} pageSize={pageSize} total={matches.length} onPageChange={setPage} onPageSizeChange={setPageSize} />
         </div>
     );
 }
@@ -348,6 +424,9 @@ function UnmatchedTable({
     emptyMessage: string;
     variant: 'warning' | 'info';
 }) {
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+
     if (rows.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
@@ -365,6 +444,8 @@ function UnmatchedTable({
         ? 'bg-red-50 dark:bg-red-950/30'
         : 'bg-amber-50 dark:bg-amber-950/30';
 
+    const paged = rows.slice((page - 1) * pageSize, page * pageSize);
+
     return (
         <div className={`overflow-auto rounded-md border ${borderClass}`}>
             <Table>
@@ -379,8 +460,8 @@ function UnmatchedTable({
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {rows.map((row, index) => (
-                        <TableRow key={index}>
+                    {paged.map((row, index) => (
+                        <TableRow key={(page - 1) * pageSize + index}>
                             <TableCell className="text-center text-muted-foreground">
                                 {row.sequence}
                             </TableCell>
@@ -403,6 +484,7 @@ function UnmatchedTable({
                     ))}
                 </TableBody>
             </Table>
+            <TablePagination page={page} pageSize={pageSize} total={rows.length} onPageChange={setPage} onPageSizeChange={setPageSize} />
         </div>
     );
 }

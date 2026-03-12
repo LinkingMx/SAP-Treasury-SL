@@ -249,6 +249,7 @@ export interface ReconciliationResult {
     unmatched_extracto: ReconciliationRow[];
     unmatched_sap: ReconciliationRow[];
     summary: ReconciliationSummary;
+    branch_name: string;
     bank_account_name: string;
     date_from: string;
     date_to: string;

@@ -6,7 +6,7 @@ use App\Models\User;
 use App\Services\ReconciliationService;
 
 test('guests cannot access reconciliation validation page', function () {
-    $this->get(route('conciliacion.validacion'))
+    $this->get(route('reconciliation.validation'))
         ->assertRedirect(route('login'));
 });
 
@@ -16,7 +16,7 @@ test('authenticated user can access reconciliation validation page', function ()
     $user->branches()->attach($branch->id);
 
     $this->actingAs($user)
-        ->get(route('conciliacion.validacion'))
+        ->get(route('reconciliation.validation'))
         ->assertOk();
 });
 
@@ -26,7 +26,7 @@ test('validate endpoint requires all fields', function () {
     $user->branches()->attach($branch->id);
 
     $this->actingAs($user)
-        ->postJson(route('conciliacion.validacion.validate'), [])
+        ->postJson(route('reconciliation.validation.validate'), [])
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['branch_id', 'bank_account_id', 'date_from', 'date_to', 'file']);
 });
@@ -44,7 +44,7 @@ test('validate endpoint rejects bank account without sap_bank_key', function () 
     $file = \Illuminate\Http\UploadedFile::fake()->create('extracto.xlsx', 100, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
     $this->actingAs($user)
-        ->postJson(route('conciliacion.validacion.validate'), [
+        ->postJson(route('reconciliation.validation.validate'), [
             'branch_id' => $branch->id,
             'bank_account_id' => $bankAccount->id,
             'date_from' => '2026-01-01',
@@ -66,7 +66,7 @@ test('validate endpoint rejects date_to before date_from', function () {
     $file = \Illuminate\Http\UploadedFile::fake()->create('extracto.xlsx', 100, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
     $this->actingAs($user)
-        ->postJson(route('conciliacion.validacion.validate'), [
+        ->postJson(route('reconciliation.validation.validate'), [
             'branch_id' => $branch->id,
             'bank_account_id' => $bankAccount->id,
             'date_from' => '2026-01-31',
@@ -88,7 +88,7 @@ test('user cannot validate for unauthorized branch', function () {
     $file = \Illuminate\Http\UploadedFile::fake()->create('extracto.xlsx', 100, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
     $this->actingAs($user)
-        ->postJson(route('conciliacion.validacion.validate'), [
+        ->postJson(route('reconciliation.validation.validate'), [
             'branch_id' => $branch->id,
             'bank_account_id' => $bankAccount->id,
             'date_from' => '2026-01-01',
@@ -161,7 +161,7 @@ test('export endpoint generates CSV download', function () {
     $user = User::factory()->create();
 
     $this->actingAs($user)
-        ->post(route('conciliacion.validacion.export'), [
+        ->post(route('reconciliation.validation.export'), [
             'matched' => [],
             'unmatched_extracto' => [],
             'unmatched_sap' => [],

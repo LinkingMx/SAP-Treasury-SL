@@ -31,7 +31,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 return null;
             }
 
-            if ($request->expectsJson() || $request->is('tesoreria/ai/*')) {
+            if ($request->expectsJson() || $request->is('treasury/ai/*')) {
                 return response()->json([
                     'success' => false,
                     'message' => $e->getMessage(),

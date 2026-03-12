@@ -17,28 +17,28 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return Inertia::render('dashboard');
     })->name('dashboard');
 
-    Route::get('tesoreria', function () {
+    Route::get('treasury', function () {
         $branchIds = auth()->user()->branches()->pluck('branches.id');
 
-        return Inertia::render('tesoreria/index', [
+        return Inertia::render('treasury/index', [
             'branches' => auth()->user()->branches()->get(['branches.id', 'branches.name']),
             'bankAccounts' => BankAccount::whereIn('branch_id', $branchIds)
                 ->get(['id', 'branch_id', 'name', 'account', 'sap_bank_key']),
             'banks' => Bank::orderBy('name')->get(['id', 'name']),
         ]);
-    })->name('tesoreria');
+    })->name('treasury');
 
-    Route::get('tesoreria/batches', [BatchController::class, 'index'])->name('batches.index');
-    Route::get('tesoreria/batches/{batch}', [BatchController::class, 'show'])->name('batches.show');
-    Route::post('tesoreria/batches', [BatchController::class, 'store'])->name('batches.store');
-    Route::delete('tesoreria/batches/{batch}', [BatchController::class, 'destroy'])->name('batches.destroy');
-    Route::post('tesoreria/batches/{batch}/process-sap', [BatchController::class, 'processToSap'])->name('batches.process-sap');
-    Route::post('tesoreria/batches/{batch}/transactions/{transaction}/reprocess', [BatchController::class, 'reprocessTransaction'])->name('batches.reprocess-transaction');
-    Route::post('tesoreria/batches/error-log', [BatchController::class, 'downloadErrorLog'])->name('batches.error-log');
-    Route::get('tesoreria/template/download', [BatchController::class, 'downloadTemplate'])->name('batches.template');
+    Route::get('treasury/batches', [BatchController::class, 'index'])->name('batches.index');
+    Route::get('treasury/batches/{batch}', [BatchController::class, 'show'])->name('batches.show');
+    Route::post('treasury/batches', [BatchController::class, 'store'])->name('batches.store');
+    Route::delete('treasury/batches/{batch}', [BatchController::class, 'destroy'])->name('batches.destroy');
+    Route::post('treasury/batches/{batch}/process-sap', [BatchController::class, 'processToSap'])->name('batches.process-sap');
+    Route::post('treasury/batches/{batch}/transactions/{transaction}/reprocess', [BatchController::class, 'reprocessTransaction'])->name('batches.reprocess-transaction');
+    Route::post('treasury/batches/error-log', [BatchController::class, 'downloadErrorLog'])->name('batches.error-log');
+    Route::get('treasury/template/download', [BatchController::class, 'downloadTemplate'])->name('batches.template');
 
     // AI Intelligent Ingest
-    Route::prefix('tesoreria/ai')->name('ai.')->group(function () {
+    Route::prefix('treasury/ai')->name('ai.')->group(function () {
         Route::post('analyze-structure', [AiIngestController::class, 'analyzeStructure'])->name('analyze-structure');
         Route::post('classify-preview', [AiIngestController::class, 'classifyPreview'])->name('classify-preview');
         Route::post('save-batch', [AiIngestController::class, 'saveBatch'])->name('save-batch');
@@ -47,7 +47,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     // Bank Statements to SAP
-    Route::prefix('tesoreria/bank-statements')->name('bank-statements.')->group(function () {
+    Route::prefix('treasury/bank-statements')->name('bank-statements.')->group(function () {
         Route::post('analyze', [BankStatementController::class, 'analyze'])->name('analyze');
         Route::post('preview', [BankStatementController::class, 'preview'])->name('preview');
         Route::post('send', [BankStatementController::class, 'send'])->name('send');
@@ -63,36 +63,36 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('afirme/download', [AfirmeController::class, 'downloadTxt'])->name('afirme.download');
 
     // Bank Reconciliation - Bank Statement Upload
-    Route::get('conciliacion/carga-extracto', function () {
+    Route::get('reconciliation/upload', function () {
         $branchIds = auth()->user()->branches()->pluck('branches.id');
 
-        return Inertia::render('conciliacion/carga-extracto', [
+        return Inertia::render('reconciliation/upload', [
             'branches' => auth()->user()->branches()->get(['branches.id', 'branches.name']),
             'bankAccounts' => BankAccount::whereIn('branch_id', $branchIds)
                 ->get(['id', 'branch_id', 'name', 'account', 'sap_bank_key']),
         ]);
-    })->name('conciliacion.carga-extracto');
+    })->name('reconciliation.upload');
 
     // Validacion en Conciliacion
-    Route::get('conciliacion/validacion', [ReconciliationController::class, 'index'])
-        ->name('conciliacion.validacion');
-    Route::post('conciliacion/validacion/validate', [ReconciliationController::class, 'runValidation'])
-        ->name('conciliacion.validacion.validate');
-    Route::post('conciliacion/validacion/export', [ReconciliationController::class, 'export'])
-        ->name('conciliacion.validacion.export');
+    Route::get('reconciliation/validation', [ReconciliationController::class, 'index'])
+        ->name('reconciliation.validation');
+    Route::post('reconciliation/validation/validate', [ReconciliationController::class, 'runValidation'])
+        ->name('reconciliation.validation.validate');
+    Route::post('reconciliation/validation/export', [ReconciliationController::class, 'export'])
+        ->name('reconciliation.validation.export');
 
     // Pagos a SAP
-    Route::get('pagos/sap', function () {
+    Route::get('payments/sap', function () {
         $branchIds = auth()->user()->branches()->pluck('branches.id');
 
-        return Inertia::render('pagos/sap', [
+        return Inertia::render('payments/sap', [
             'branches' => auth()->user()->branches()->get(['branches.id', 'branches.name']),
             'bankAccounts' => BankAccount::whereIn('branch_id', $branchIds)
                 ->get(['id', 'branch_id', 'name', 'account']),
         ]);
-    })->name('pagos.sap');
+    })->name('payments.sap');
 
-    Route::prefix('pagos/sap')->name('vendor-payments.')->group(function () {
+    Route::prefix('payments/sap')->name('vendor-payments.')->group(function () {
         Route::get('batches', [App\Http\Controllers\VendorPaymentController::class, 'index'])->name('index');
         Route::get('batches/{batch}', [App\Http\Controllers\VendorPaymentController::class, 'show'])->name('show');
         Route::post('batches', [App\Http\Controllers\VendorPaymentController::class, 'store'])->name('store');

@@ -33,7 +33,7 @@ import {
     Upload,
     X,
 } from 'lucide-react';
-import ReconciliationReport from '@/components/conciliacion/ReconciliationReport';
+import ReconciliationReport from '@/components/reconciliation/ReconciliationReport';
 
 type ValidationStatus = 'idle' | 'processing' | 'complete' | 'error';
 
@@ -171,7 +171,7 @@ export default function ReconciliationForm({ branches, bankAccounts }: Props) {
             formData.append('date_from', dateFrom);
             formData.append('date_to', dateTo);
 
-            const response = await fetch('/conciliacion/validacion/validate', {
+            const response = await fetch('/reconciliation/validation/validate', {
                 method: 'POST',
                 headers: {
                     'X-CSRF-TOKEN': csrfToken,

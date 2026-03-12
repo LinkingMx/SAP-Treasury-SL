@@ -1,11 +1,11 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BankAccount, type Branch, type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import BankStatementUpload from '@/components/tesoreria/BankStatementUpload';
+import BankStatementUpload from '@/components/treasury/BankStatementUpload';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Conciliación Bancaria', href: '#' },
-    { title: 'Carga de Extracto Bancario', href: '/conciliacion/carga-extracto' },
+    { title: 'Carga de Extracto Bancario', href: '/reconciliation/upload' },
 ];
 
 interface Props {

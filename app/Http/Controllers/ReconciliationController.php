@@ -25,7 +25,7 @@ class ReconciliationController extends Controller
     {
         $branchIds = $request->user()->branches()->pluck('branches.id');
 
-        return Inertia::render('conciliacion/validacion', [
+        return Inertia::render('reconciliation/validation', [
             'branches' => $request->user()->branches()->get(['branches.id', 'branches.name']),
             'bankAccounts' => BankAccount::whereIn('branch_id', $branchIds)
                 ->get(['id', 'branch_id', 'name', 'account', 'sap_bank_key']),

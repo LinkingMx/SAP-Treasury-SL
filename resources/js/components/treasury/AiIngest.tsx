@@ -14,7 +14,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import AccountCombobox, { SKIP_SAP_CODE } from '@/components/tesoreria/AccountCombobox';
+import AccountCombobox, { SKIP_SAP_CODE } from '@/components/treasury/AccountCombobox';
 import {
     Table,
     TableBody,
@@ -243,7 +243,7 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
             updateStep(1, 'active');
             setProgress(25);
 
-            const analyzeResponse = await fetch('/tesoreria/ai/analyze-structure', {
+            const analyzeResponse = await fetch('/treasury/ai/analyze-structure', {
                 method: 'POST',
                 headers: {
                     'X-CSRF-TOKEN': csrfToken,
@@ -273,7 +273,7 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
             classifyFormData.append('parse_config', JSON.stringify(analyzeData.parse_config));
             classifyFormData.append('branch_id', selectedBranch);
 
-            const classifyResponse = await fetch('/tesoreria/ai/classify-preview', {
+            const classifyResponse = await fetch('/treasury/ai/classify-preview', {
                 method: 'POST',
                 headers: {
                     'X-CSRF-TOKEN': csrfToken,
@@ -353,7 +353,7 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
         setErrorMessage(null);
 
         try {
-            const response = await fetch('/tesoreria/ai/save-batch', {
+            const response = await fetch('/treasury/ai/save-batch', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -400,7 +400,7 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
         setSavingRule(transaction.sequence);
 
         try {
-            const response = await fetch('/tesoreria/ai/save-rule', {
+            const response = await fetch('/treasury/ai/save-rule', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -442,7 +442,7 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
             classifyFormData.append('branch_id', selectedBranch);
             // Use full classification: rules + AI
 
-            const classifyResponse = await fetch('/tesoreria/ai/classify-preview', {
+            const classifyResponse = await fetch('/treasury/ai/classify-preview', {
                 method: 'POST',
                 headers: {
                     'X-CSRF-TOKEN': csrfToken,

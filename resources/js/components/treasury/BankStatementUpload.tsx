@@ -254,7 +254,7 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
     const fetchHistory = async (branchId: string) => {
         setHistoryLoading(true);
         try {
-            const response = await fetch(`/tesoreria/bank-statements/history?branch_id=${branchId}`, {
+            const response = await fetch(`/treasury/bank-statements/history?branch_id=${branchId}`, {
                 headers: {
                     Accept: 'application/json',
                     'X-CSRF-TOKEN': csrfToken,
@@ -307,7 +307,7 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
             updateStep(1, 'active');
             setProgress(15);
 
-            const analyzeResponse = await fetch('/tesoreria/bank-statements/analyze', {
+            const analyzeResponse = await fetch('/treasury/bank-statements/analyze', {
                 method: 'POST',
                 headers: {
                     'X-CSRF-TOKEN': csrfToken,
@@ -341,7 +341,7 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
             previewFormData.append('parse_config', JSON.stringify(analyzeData.parse_config));
             previewFormData.append('branch_id', selectedBranch);
 
-            const previewResponse = await fetch('/tesoreria/bank-statements/preview', {
+            const previewResponse = await fetch('/treasury/bank-statements/preview', {
                 method: 'POST',
                 headers: {
                     'X-CSRF-TOKEN': csrfToken,
@@ -441,7 +441,7 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
         setErrorMessage(null);
 
         try {
-            const response = await fetch('/tesoreria/bank-statements/send', {
+            const response = await fetch('/treasury/bank-statements/send', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -511,7 +511,7 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
         setDetailData(null);
 
         try {
-            const response = await fetch(`/tesoreria/bank-statements/${statementId}`, {
+            const response = await fetch(`/treasury/bank-statements/${statementId}`, {
                 headers: {
                     Accept: 'application/json',
                     'X-CSRF-TOKEN': csrfToken,
@@ -537,7 +537,7 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
     const handleReprocess = async (statementId: number) => {
         setReprocessingId(statementId);
         try {
-            const response = await fetch(`/tesoreria/bank-statements/${statementId}/reprocess`, {
+            const response = await fetch(`/treasury/bank-statements/${statementId}/reprocess`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -569,7 +569,7 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
         setDeletingId(statementToDelete.id);
 
         try {
-            const response = await fetch(`/tesoreria/bank-statements/${statementToDelete.id}`, {
+            const response = await fetch(`/treasury/bank-statements/${statementToDelete.id}`, {
                 method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json',

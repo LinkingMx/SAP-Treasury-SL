@@ -1,11 +1,11 @@
-import ReconciliationForm from '@/components/conciliacion/ReconciliationForm';
+import ReconciliationForm from '@/components/reconciliation/ReconciliationForm';
 import AppLayout from '@/layouts/app-layout';
 import { type BankAccount, type Branch, type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Conciliacion Bancaria', href: '#' },
-    { title: 'Validacion en Conciliacion', href: '/conciliacion/validacion' },
+    { title: 'Validacion en Conciliacion', href: '/reconciliation/validation' },
 ];
 
 interface Props {

@@ -40,9 +40,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
-import { tesoreria } from '@/routes';
+import { treasury } from '@/routes';
 import { downloadTemplate } from '@/actions/App/Http/Controllers/BatchController';
-import AiIngest from '@/components/tesoreria/AiIngest';
+import AiIngest from '@/components/treasury/AiIngest';
 import {
     type Bank,
     type BankAccount,
@@ -77,7 +77,7 @@ import {
 const breadcrumbs: BreadcrumbItem[] = [
     {
         title: 'AC Tesorería',
-        href: tesoreria().url,
+        href: treasury().url,
     },
 ];
 
@@ -143,7 +143,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                     page: String(page),
                 });
 
-                const response = await fetch(`/tesoreria/batches?${params}`, {
+                const response = await fetch(`/treasury/batches?${params}`, {
                     credentials: 'same-origin',
                     headers: {
                         Accept: 'application/json',
@@ -183,7 +183,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
 
         setIsDeleting(true);
         try {
-            const response = await fetch(`/tesoreria/batches/${batchToDelete.id}`, {
+            const response = await fetch(`/treasury/batches/${batchToDelete.id}`, {
                 method: 'DELETE',
                 credentials: 'same-origin',
                 headers: {
@@ -213,7 +213,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
         setBatchDetailOpen(true);
         setBatchDetail(null);
         try {
-            const response = await fetch(`/tesoreria/batches/${batch.id}`, {
+            const response = await fetch(`/treasury/batches/${batch.id}`, {
                 credentials: 'same-origin',
                 headers: {
                     Accept: 'application/json',
@@ -240,7 +240,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
 
         setProcessingBatchId(batch.id);
         try {
-            const response = await fetch(`/tesoreria/batches/${batch.id}/process-sap`, {
+            const response = await fetch(`/treasury/batches/${batch.id}/process-sap`, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
@@ -272,7 +272,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
         setReprocessingTransactionId(transactionId);
         try {
             const response = await fetch(
-                `/tesoreria/batches/${batchDetail.id}/transactions/${transactionId}/reprocess`,
+                `/treasury/batches/${batchDetail.id}/transactions/${transactionId}/reprocess`,
                 {
                     method: 'POST',
                     credentials: 'same-origin',
@@ -394,7 +394,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
             setUploadProgress(40);
             setUploadStatus('processing');
 
-            const response = await fetch('/tesoreria/batches', {
+            const response = await fetch('/treasury/batches', {
                 method: 'POST',
                 body: formData,
                 credentials: 'same-origin',
@@ -452,7 +452,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
     const handleDownloadErrors = () => {
         const form = document.createElement('form');
         form.method = 'POST';
-        form.action = '/tesoreria/batches/error-log';
+        form.action = '/treasury/batches/error-log';
 
         const csrfInput = document.createElement('input');
         csrfInput.type = 'hidden';

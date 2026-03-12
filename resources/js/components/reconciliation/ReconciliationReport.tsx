@@ -98,7 +98,7 @@ export default function ReconciliationReport({ result, onNewValidation, csrfToke
     const handleExport = async () => {
         setExporting(true);
         try {
-            const response = await fetch('/conciliacion/validacion/export', {
+            const response = await fetch('/reconciliation/validation/export', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

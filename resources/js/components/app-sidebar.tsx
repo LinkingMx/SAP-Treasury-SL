@@ -9,9 +9,9 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { afirme, dashboard, tesoreria } from '@/routes';
-import { cargaExtracto } from '@/routes/conciliacion';
-import { sap as pagosSap } from '@/routes/pagos';
+import { afirme, dashboard, treasury } from '@/routes';
+import { upload } from '@/routes/reconciliation';
+import { sap as pagosSap } from '@/routes/payments';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
 import { Building2, FileSearch, FileSpreadsheet, FileText, Landmark, LayoutGrid, Wallet } from 'lucide-react';
@@ -28,7 +28,7 @@ const platformItems: NavItem[] = [
 const bankingItems: NavItem[] = [
     {
         title: 'AC Tesorería',
-        href: tesoreria(),
+        href: treasury(),
         icon: Landmark,
     },
     {
@@ -41,12 +41,12 @@ const bankingItems: NavItem[] = [
 const conciliacionItems: NavItem[] = [
     {
         title: 'Carga de Extracto Bancario',
-        href: cargaExtracto(),
+        href: upload(),
         icon: FileSpreadsheet,
     },
     {
         title: 'Validacion en Conciliacion',
-        href: '/conciliacion/validacion',
+        href: '/reconciliation/validation',
         icon: FileSearch,
     },
 ];

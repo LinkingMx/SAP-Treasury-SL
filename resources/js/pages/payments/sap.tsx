@@ -39,7 +39,7 @@ import {
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
-import { sap as pagosSap } from '@/routes/pagos';
+import { sap as pagosSap } from '@/routes/payments';
 import type {
     BankAccount,
     Branch,
@@ -138,7 +138,7 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
                     page: String(page),
                 });
 
-                const response = await fetch(`/pagos/sap/batches?${params}`, {
+                const response = await fetch(`/payments/sap/batches?${params}`, {
                     headers: {
                         Accept: 'application/json',
                         'X-CSRF-TOKEN':
@@ -177,7 +177,7 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
 
         setIsDeleting(true);
         try {
-            const response = await fetch(`/pagos/sap/batches/${batchToDelete.id}`, {
+            const response = await fetch(`/payments/sap/batches/${batchToDelete.id}`, {
                 method: 'DELETE',
                 headers: {
                     Accept: 'application/json',
@@ -206,7 +206,7 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
         setBatchDetailOpen(true);
         setBatchDetail(null);
         try {
-            const response = await fetch(`/pagos/sap/batches/${batch.id}`, {
+            const response = await fetch(`/payments/sap/batches/${batch.id}`, {
                 headers: {
                     Accept: 'application/json',
                 },
@@ -232,7 +232,7 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
 
         setProcessingBatchId(batch.id);
         try {
-            const response = await fetch(`/pagos/sap/batches/${batch.id}/process`, {
+            const response = await fetch(`/payments/sap/batches/${batch.id}/process`, {
                 method: 'POST',
                 headers: {
                     Accept: 'application/json',
@@ -263,7 +263,7 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
         setReprocessingCardCode(cardCode);
         try {
             const response = await fetch(
-                `/pagos/sap/batches/${batchDetail.id}/payments/${cardCode}/reprocess`,
+                `/payments/sap/batches/${batchDetail.id}/payments/${cardCode}/reprocess`,
                 {
                     method: 'POST',
                     headers: {
@@ -372,7 +372,7 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
             setUploadProgress(40);
             setUploadStatus('processing');
 
-            const response = await fetch('/pagos/sap/batches', {
+            const response = await fetch('/payments/sap/batches', {
                 method: 'POST',
                 body: formData,
                 headers: {
@@ -426,7 +426,7 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
     const handleDownloadErrors = () => {
         const form = document.createElement('form');
         form.method = 'POST';
-        form.action = '/pagos/sap/batches/error-log';
+        form.action = '/payments/sap/batches/error-log';
 
         const csrfInput = document.createElement('input');
         csrfInput.type = 'hidden';
@@ -568,7 +568,7 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
                                     <div className="flex items-center justify-between">
                                         <Label htmlFor="file">Archivo Excel</Label>
                                         <a
-                                            href="/pagos/sap/template/download"
+                                            href="/payments/sap/template/download"
                                             className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                                         >
                                             <Download className="h-3 w-3" />

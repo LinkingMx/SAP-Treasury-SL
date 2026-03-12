@@ -45,8 +45,8 @@ import {
     Clock,
 } from 'lucide-react';
 
-const PAGE_SIZE_OPTIONS = [25, 50, 100];
-const DEFAULT_PAGE_SIZE = 50;
+const PAGE_SIZE_OPTIONS = [20, 50, 100];
+const DEFAULT_PAGE_SIZE = 20;
 
 interface Props {
     result: ReconciliationResult;
@@ -253,51 +253,13 @@ export default function ReconciliationReport({ result, onNewValidation, csrfToke
 
             {/* Account Balances */}
             {result.balances && (
-                <Card>
-                    <CardHeader className="pb-3">
-                        <CardTitle className="flex items-center gap-2 text-base">
-                            <Wallet className="h-4 w-4 text-primary" />
-                            Saldos de Cuenta SAP
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                            <div className="rounded-lg border p-4">
-                                <div className="flex items-center justify-between">
-                                    <p className="text-sm text-muted-foreground">Saldo Inicial</p>
-                                    <DollarSign className="h-4 w-4 text-muted-foreground" />
-                                </div>
-                                <p className="mt-1 text-xl font-bold">{formatCurrency(result.balances.opening_balance)}</p>
-                                <p className="text-xs text-muted-foreground">Al {formatDate(result.date_from)}</p>
-                            </div>
-                            <div className="rounded-lg border p-4">
-                                <div className="flex items-center justify-between">
-                                    <p className="text-sm text-muted-foreground">Neto del Periodo</p>
-                                    {result.balances.period_net >= 0 ? (
-                                        <TrendingUp className="h-4 w-4 text-green-500" />
-                                    ) : (
-                                        <TrendingDown className="h-4 w-4 text-red-500" />
-                                    )}
-                                </div>
-                                <p className={`mt-1 text-xl font-bold ${result.balances.period_net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                    {formatCurrency(result.balances.period_net)}
-                                </p>
-                                <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-                                    <p>Debitos: {formatCurrency(result.balances.period_debit)}</p>
-                                    <p>Creditos: {formatCurrency(result.balances.period_credit)}</p>
-                                </div>
-                            </div>
-                            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
-                                <div className="flex items-center justify-between">
-                                    <p className="text-sm font-medium text-muted-foreground">Saldo Final</p>
-                                    <Wallet className="h-4 w-4 text-primary" />
-                                </div>
-                                <p className="mt-1 text-xl font-bold text-primary">{formatCurrency(result.balances.closing_balance)}</p>
-                                <p className="text-xs text-muted-foreground">Al {formatDate(result.date_to)}</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                <BalancesCard
+                    balances={result.balances}
+                    manualOpening={result.manual_opening_balance}
+                    manualClosing={result.manual_closing_balance}
+                    dateFrom={result.date_from}
+                    dateTo={result.date_to}
+                />
             )}
 
             {/* Tabs with tables */}
@@ -540,5 +502,123 @@ function UnmatchedTable({
             </Table>
             <TablePagination page={page} pageSize={pageSize} total={rows.length} onPageChange={setPage} onPageSizeChange={setPageSize} />
         </div>
+    );
+}
+
+function BalanceDiffBadge({ diff }: { diff: number }) {
+    const absDiff = Math.abs(diff);
+    if (absDiff < 0.01) {
+        return <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs px-2 py-0.5">Cuadra</Badge>;
+    }
+    return <Badge variant="destructive" className="text-xs px-2 py-0.5">Dif: {formatCurrency(diff)}</Badge>;
+}
+
+function BalancesCard({
+    balances,
+    manualOpening,
+    manualClosing,
+    dateFrom,
+    dateTo,
+}: {
+    balances: AccountBalances;
+    manualOpening: number | null;
+    manualClosing: number | null;
+    dateFrom: string;
+    dateTo: string;
+}) {
+    const hasManual = manualOpening !== null || manualClosing !== null;
+    const openingDiff = manualOpening !== null ? manualOpening - balances.opening_balance : null;
+    const closingDiff = manualClosing !== null ? manualClosing - balances.closing_balance : null;
+
+    return (
+        <Card>
+            <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                    <Wallet className="h-4 w-4 text-primary" />
+                    Saldos de Cuenta SAP
+                </CardTitle>
+            </CardHeader>
+            <CardContent>
+                <div className="overflow-auto rounded-md border">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="text-xs">Concepto</TableHead>
+                                <TableHead className="text-right text-xs">SAP (JDT1)</TableHead>
+                                {hasManual && <TableHead className="text-right text-xs">Extracto Bancario</TableHead>}
+                                {hasManual && <TableHead className="text-center text-xs">Validacion</TableHead>}
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            <TableRow>
+                                <TableCell className="py-2">
+                                    <div className="flex items-center gap-1.5 text-xs font-medium">
+                                        <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+                                        Saldo Inicial
+                                        <span className="text-[10px] text-muted-foreground">({formatDate(dateFrom)})</span>
+                                    </div>
+                                </TableCell>
+                                <TableCell className="py-2 text-right font-mono text-sm font-semibold">
+                                    {formatCurrency(balances.opening_balance)}
+                                </TableCell>
+                                {hasManual && (
+                                    <TableCell className="py-2 text-right font-mono text-sm font-semibold">
+                                        {manualOpening !== null ? formatCurrency(manualOpening) : <span className="text-muted-foreground">-</span>}
+                                    </TableCell>
+                                )}
+                                {hasManual && (
+                                    <TableCell className="py-2 text-center">
+                                        {openingDiff !== null ? <BalanceDiffBadge diff={openingDiff} /> : <span className="text-muted-foreground">-</span>}
+                                    </TableCell>
+                                )}
+                            </TableRow>
+                            <TableRow>
+                                <TableCell className="py-2">
+                                    <div className="flex items-center gap-1.5 text-xs">
+                                        {balances.period_net >= 0 ? (
+                                            <TrendingUp className="h-3.5 w-3.5 text-green-500" />
+                                        ) : (
+                                            <TrendingDown className="h-3.5 w-3.5 text-red-500" />
+                                        )}
+                                        <span className="font-medium">Neto del Periodo</span>
+                                    </div>
+                                    <div className="ml-5 mt-0.5 flex gap-3 text-[10px] text-muted-foreground">
+                                        <span>Deb: {formatCurrency(balances.period_debit)}</span>
+                                        <span>Cred: {formatCurrency(balances.period_credit)}</span>
+                                    </div>
+                                </TableCell>
+                                <TableCell className={`py-2 text-right font-mono text-sm font-semibold ${balances.period_net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                    {formatCurrency(balances.period_net)}
+                                </TableCell>
+                                {hasManual && <TableCell className="py-2" />}
+                                {hasManual && <TableCell className="py-2" />}
+                            </TableRow>
+                            <TableRow className="bg-primary/5">
+                                <TableCell className="py-2.5">
+                                    <div className="flex items-center gap-1.5 text-xs font-semibold">
+                                        <Wallet className="h-3.5 w-3.5 text-primary" />
+                                        Saldo Final
+                                        <span className="text-[10px] font-normal text-muted-foreground">({formatDate(dateTo)})</span>
+                                    </div>
+                                </TableCell>
+                                <TableCell className="py-2.5 text-right font-mono text-base font-bold text-primary">
+                                    {formatCurrency(balances.closing_balance)}
+                                </TableCell>
+                                {hasManual && (
+                                    <TableCell className="py-2.5 text-right font-mono text-base font-bold">
+                                        {manualClosing !== null ? formatCurrency(manualClosing) : <span className="text-muted-foreground">-</span>}
+                                    </TableCell>
+                                )}
+                                {hasManual && (
+                                    <TableCell className="py-2.5 text-center">
+                                        {closingDiff !== null ? <BalanceDiffBadge diff={closingDiff} /> : <span className="text-muted-foreground">-</span>}
+                                    </TableCell>
+                                )}
+                            </TableRow>
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
     );
 }

@@ -24,6 +24,7 @@ import {
     Calendar,
     CheckCircle2,
     Circle,
+    DollarSign,
     FileSpreadsheet,
     Landmark,
     Loader2,
@@ -68,6 +69,8 @@ export default function ReconciliationForm({ branches, bankAccounts }: Props) {
     const [dateTo, setDateTo] = useState<string>('');
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [manualOpeningBalance, setManualOpeningBalance] = useState<string>('');
+    const [manualClosingBalance, setManualClosingBalance] = useState<string>('');
 
     // Processing state
     const [status, setStatus] = useState<ValidationStatus>('idle');
@@ -221,6 +224,10 @@ export default function ReconciliationForm({ branches, bankAccounts }: Props) {
             if (!finalData) {
                 throw new Error('No se recibio respuesta del servidor.');
             }
+
+            // Attach manual balances
+            finalData.manual_opening_balance = manualOpeningBalance ? parseFloat(manualOpeningBalance) : null;
+            finalData.manual_closing_balance = manualClosingBalance ? parseFloat(manualClosingBalance) : null;
 
             // Complete
             updateStep(4, 'complete');
@@ -423,7 +430,39 @@ export default function ReconciliationForm({ branches, bankAccounts }: Props) {
                         </div>
                     </div>
 
-                    {/* Row 3: File upload */}
+                    {/* Row 3: Manual balances (optional) */}
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                            <Label htmlFor="opening-balance">
+                                <DollarSign className="mr-1 inline h-4 w-4" />
+                                Saldo Inicial (Extracto Bancario)
+                            </Label>
+                            <Input
+                                id="opening-balance"
+                                type="number"
+                                step="0.01"
+                                value={manualOpeningBalance}
+                                onChange={(e) => setManualOpeningBalance(e.target.value)}
+                                placeholder="Opcional - ej: 5,454,702.84"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="closing-balance">
+                                <DollarSign className="mr-1 inline h-4 w-4" />
+                                Saldo Final (Extracto Bancario)
+                            </Label>
+                            <Input
+                                id="closing-balance"
+                                type="number"
+                                step="0.01"
+                                value={manualClosingBalance}
+                                onChange={(e) => setManualClosingBalance(e.target.value)}
+                                placeholder="Opcional - ej: 4,834,119.47"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Row 4: File upload */}
                     <div className="space-y-2">
                         <Label htmlFor="file">
                             <FileSpreadsheet className="mr-1 inline h-4 w-4" />

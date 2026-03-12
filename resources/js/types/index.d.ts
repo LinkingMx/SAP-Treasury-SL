@@ -264,4 +264,6 @@ export interface ReconciliationResult {
     date_to: string;
     generated_at: string;
     generated_by: string;
+    manual_opening_balance: number | null;
+    manual_closing_balance: number | null;
 }

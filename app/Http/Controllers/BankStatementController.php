@@ -316,15 +316,18 @@ class BankStatementController extends Controller
             ], 403);
         }
 
-        // Collect all sap_sequences from payload
+        // Collect all sap_sequences with their AccountCode from payload
         $bankPages = $bankStatement->payload['BankPages'] ?? [];
-        $sequences = collect($bankPages)
-            ->pluck('sap_sequence')
-            ->filter()
+        $pages = collect($bankPages)
+            ->filter(fn ($page) => ! empty($page['sap_sequence']))
+            ->map(fn ($page) => [
+                'account_code' => $page['AccountCode'],
+                'sequence' => $page['sap_sequence'],
+            ])
             ->values()
             ->all();
 
-        if (empty($sequences)) {
+        if (empty($pages)) {
             return response()->json([
                 'success' => false,
                 'message' => 'No hay movimientos con secuencia SAP para eliminar.',
@@ -342,7 +345,7 @@ class BankStatementController extends Controller
                 ], 500);
             }
 
-            $result = $sap->deleteBankPages($sequences);
+            $result = $sap->deleteBankPages($pages);
             $sap->logout();
 
             // Update status to cancelled
@@ -360,7 +363,7 @@ class BankStatementController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => "Se eliminaron {$result['deleted_count']} de ".count($sequences)." movimientos. {$result['failed_count']} fallaron.",
+                'message' => "Se eliminaron {$result['deleted_count']} de ".count($pages)." movimientos. {$result['failed_count']} fallaron.",
                 'deleted_count' => $result['deleted_count'],
                 'failed_count' => $result['failed_count'],
                 'errors' => $result['errors'],

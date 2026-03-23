@@ -152,14 +152,16 @@ class ProcessBatchToSapJob implements ShouldQueue
      */
     public function failed(?\Throwable $exception): void
     {
-        Log::error('ProcessBatchToSapJob failed', [
-            'batch_id' => $this->batch->id,
-            'error' => $exception?->getMessage(),
-        ]);
-
+        // Update batch status BEFORE logging to prevent stuck "processing" state
+        // if the log file is not writable
         $this->batch->update([
             'status' => BatchStatus::Failed,
             'error_message' => 'Error en el proceso: '.($exception?->getMessage() ?? 'Error desconocido'),
+        ]);
+
+        Log::error('ProcessBatchToSapJob failed', [
+            'batch_id' => $this->batch->id,
+            'error' => $exception?->getMessage(),
         ]);
     }
 }

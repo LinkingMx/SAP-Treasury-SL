@@ -709,7 +709,7 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
                                                     )}
                                                 >
                                                     <TableCell>{t.sequence}</TableCell>
-                                                    <TableCell>{new Date(t.due_date).toLocaleDateString('es-MX')}</TableCell>
+                                                    <TableCell>{new Date(t.due_date + 'T12:00:00').toLocaleDateString('es-MX')}</TableCell>
                                                     <TableCell className="max-w-[300px] truncate" title={t.memo}>
                                                         {t.memo}
                                                     </TableCell>

@@ -70,6 +70,7 @@ REGLAS PARA date.format:
 - "DD/MM/YYYY" para fechas como 17/02/2026
 - "YYYY-MM-DD" para fechas como 2026-02-17
 - "DD-MM-YY" o "DD-MM-YYYY" para guiones
+- IMPORTANTE: Este sistema es para bancos MEXICANOS. En México el formato SIEMPRE es DD/MM (día/mes), NUNCA MM/DD. No uses formatos MM/DD.
 
 IMPORTANTE:
 - Los índices son BASE 0 (la primera columna es 0)
@@ -477,6 +478,13 @@ PROMPT;
         }
 
         try {
+            // Handle Excel date serial numbers (e.g. "46083" → 2026-03-02)
+            if (is_numeric($raw) && (float) $raw >= 36526 && (float) $raw <= 73415) {
+                $dateTime = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float) $raw);
+
+                return $dateTime->format('Y-m-d');
+            }
+
             // Normalize separators for matching
             $sep = str_contains($raw, '/') ? '/' : '-';
             $parts = explode($sep, $raw);
@@ -487,44 +495,14 @@ PROMPT;
             }
 
             switch ($format) {
-                case 'DD/MM/YY':
-                case 'DD-MM-YY':
-                    $day = (int) $parts[0];
-                    $month = (int) $parts[1];
-                    $year = (int) $parts[2];
-                    $year = $year < 100 ? $year + 2000 : $year;
-                    break;
-
-                case 'DD/MM/YYYY':
-                case 'DD-MM-YYYY':
-                    $day = (int) $parts[0];
-                    $month = (int) $parts[1];
-                    $year = (int) $parts[2];
-                    break;
-
                 case 'YYYY-MM-DD':
                     $year = (int) $parts[0];
                     $month = (int) $parts[1];
                     $day = (int) $parts[2];
                     break;
 
-                case 'MM/DD/YY':
-                case 'MM-DD-YY':
-                    $month = (int) $parts[0];
-                    $day = (int) $parts[1];
-                    $year = (int) $parts[2];
-                    $year = $year < 100 ? $year + 2000 : $year;
-                    break;
-
-                case 'MM/DD/YYYY':
-                case 'MM-DD-YYYY':
-                    $month = (int) $parts[0];
-                    $day = (int) $parts[1];
-                    $year = (int) $parts[2];
-                    break;
-
                 default:
-                    // Assume DD/MM/YY as most common in Mexican banks
+                    // Mexican banks always use DD/MM — force this for all formats
                     $day = (int) $parts[0];
                     $month = (int) $parts[1];
                     $year = (int) $parts[2];
@@ -552,11 +530,30 @@ PROMPT;
         if (in_array($extension, ['xlsx', 'xls'])) {
             $spreadsheet = IOFactory::load($file->getPathname());
             $sheet = $spreadsheet->getActiveSheet();
-            $data = $sheet->toArray();
+            $data = $sheet->toArray(null, true, false);
 
             $lines = [];
-            foreach ($data as $row) {
-                $lines[] = implode("\t", array_map(fn ($cell) => (string) ($cell ?? ''), $row));
+            foreach ($data as $rowIndex => $row) {
+                $cellValues = [];
+                foreach ($row as $colIndex => $value) {
+                    // Detect Excel date serials: integers in plausible date range (year 2000–2100 ≈ 36526–73415)
+                    if (is_numeric($value) && (float) $value >= 36526 && (float) $value <= 73415) {
+                        $coord = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex + 1).($rowIndex + 1);
+                        $cell = $sheet->getCell($coord);
+                        if (\PhpOffice\PhpSpreadsheet\Shared\Date::isDateTime($cell)) {
+                            try {
+                                $dateTime = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float) $value);
+                                $cellValues[] = $dateTime->format('d/m/Y');
+
+                                continue;
+                            } catch (\Exception $e) {
+                                // Fall through
+                            }
+                        }
+                    }
+                    $cellValues[] = (string) ($value ?? '');
+                }
+                $lines[] = implode("\t", $cellValues);
             }
 
             return implode("\n", $lines);

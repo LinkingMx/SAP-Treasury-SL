@@ -726,7 +726,7 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                                         transactions.map((t) => (
                                             <TableRow key={t.sequence}>
                                                 <TableCell>{t.sequence}</TableCell>
-                                                <TableCell>{new Date(t.due_date).toLocaleDateString('es-MX')}</TableCell>
+                                                <TableCell>{new Date(t.due_date + 'T12:00:00').toLocaleDateString('es-MX')}</TableCell>
                                                 <TableCell className="max-w-[400px] truncate" title={t.memo}>
                                                     {t.memo}
                                                 </TableCell>
@@ -1208,7 +1208,7 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                                                                     )}
                                                                 </TableCell>
                                                                 <TableCell className="text-xs">
-                                                                    {row.DueDate ? new Date(row.DueDate).toLocaleDateString('es-MX') : '-'}
+                                                                    {row.DueDate ? new Date(row.DueDate.replace(/T.*$/, 'T12:00:00')).toLocaleDateString('es-MX') : '-'}
                                                                 </TableCell>
                                                                 <TableCell className="max-w-[250px] truncate" title={description}>
                                                                     {description}

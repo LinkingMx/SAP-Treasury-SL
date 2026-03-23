@@ -1,5 +1,7 @@
 <?php
 
+umask(0002);
+
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;

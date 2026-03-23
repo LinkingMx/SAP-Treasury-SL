@@ -491,11 +491,11 @@ class SapServiceLayer
     }
 
     /**
-     * Delete a BankPage from SAP by its Sequence number.
+     * Delete a BankPage from SAP by its AccountCode and Sequence (composite key).
      *
      * @return array{success: bool, error: string|null}
      */
-    public function deleteBankPage(int $sequence): array
+    public function deleteBankPage(string $accountCode, int $sequence): array
     {
         if (! $this->sessionId) {
             return ['success' => false, 'error' => 'Not logged in to SAP Service Layer'];
@@ -506,16 +506,17 @@ class SapServiceLayer
                 ->withOptions(['verify' => false])
                 ->timeout(30)
                 ->withCookies(['B1SESSION' => $this->sessionId], parse_url($this->baseUrl, PHP_URL_HOST))
-                ->delete("{$this->baseUrl}/BankPages({$sequence})");
+                ->delete("{$this->baseUrl}/BankPages(AccountCode='{$accountCode}',Sequence={$sequence})");
 
             if ($response->successful() || $response->status() === 204) {
-                Log::debug('SAP BankPage deleted', ['sequence' => $sequence]);
+                Log::debug('SAP BankPage deleted', ['accountCode' => $accountCode, 'sequence' => $sequence]);
 
                 return ['success' => true, 'error' => null];
             }
 
             $errorMessage = $response->json('error.message.value', 'Unknown SAP error');
             Log::error('SAP BankPage deletion failed', [
+                'accountCode' => $accountCode,
                 'sequence' => $sequence,
                 'status' => $response->status(),
                 'error' => $errorMessage,
@@ -525,6 +526,7 @@ class SapServiceLayer
 
         } catch (ConnectionException $e) {
             Log::error('SAP Connection failed during BankPage deletion', [
+                'accountCode' => $accountCode,
                 'sequence' => $sequence,
                 'error' => $e->getMessage(),
             ]);
@@ -536,25 +538,25 @@ class SapServiceLayer
     /**
      * Delete multiple BankPages from SAP.
      *
-     * @param  array<int>  $sequences
+     * @param  array<int, array{account_code: string, sequence: int}>  $pages  Each element must have account_code and sequence
      * @return array{success: bool, deleted_count: int, failed_count: int, errors: array}
      */
-    public function deleteBankPages(array $sequences): array
+    public function deleteBankPages(array $pages): array
     {
         $deletedCount = 0;
         $failedCount = 0;
         $errors = [];
 
-        Log::info('SAP BankPages batch delete start', ['count' => count($sequences)]);
+        Log::info('SAP BankPages batch delete start', ['count' => count($pages)]);
 
-        foreach ($sequences as $sequence) {
-            $result = $this->deleteBankPage($sequence);
+        foreach ($pages as $page) {
+            $result = $this->deleteBankPage($page['account_code'], $page['sequence']);
 
             if ($result['success']) {
                 $deletedCount++;
             } else {
                 $failedCount++;
-                $errors[] = "Sequence {$sequence}: {$result['error']}";
+                $errors[] = "Sequence {$page['sequence']}: {$result['error']}";
             }
         }
 

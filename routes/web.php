@@ -102,6 +102,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('template/download', [App\Http\Controllers\VendorPaymentController::class, 'downloadTemplate'])->name('template');
         Route::post('batches/error-log', [App\Http\Controllers\VendorPaymentController::class, 'downloadErrorLog'])->name('error-log');
     });
+
+    // Reports
+    Route::get('reports/transactions', [App\Http\Controllers\ReportController::class, 'transactions'])->name('reports.transactions');
+    Route::get('reports/transactions/data', [App\Http\Controllers\ReportController::class, 'transactionsData'])->name('reports.transactions.data');
 });
 
 require __DIR__.'/settings.php';

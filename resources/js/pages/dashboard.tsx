@@ -187,7 +187,7 @@ export default function Dashboard({ branches, bankAccounts }: DashboardProps) {
                 {/* Filters */}
                 <div className="flex items-center gap-3">
                     <Select value={branchId} onValueChange={setBranchId}>
-                        <SelectTrigger className="w-[260px]">
+                        <SelectTrigger className="w-full max-w-md">
                             <SelectValue placeholder="Todas las sucursales" />
                         </SelectTrigger>
                         <SelectContent>

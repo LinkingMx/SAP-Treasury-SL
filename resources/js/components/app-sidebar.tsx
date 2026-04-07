@@ -14,7 +14,7 @@ import { upload } from '@/routes/reconciliation';
 import { sap as pagosSap } from '@/routes/payments';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { Building2, FileSearch, FileSpreadsheet, FileText, Landmark, LayoutGrid, Wallet } from 'lucide-react';
+import { Building2, ClipboardList, FileSearch, FileSpreadsheet, FileText, Landmark, LayoutGrid, Wallet } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const platformItems: NavItem[] = [
@@ -59,6 +59,14 @@ const pagosItems: NavItem[] = [
     },
 ];
 
+const reportItems: NavItem[] = [
+    {
+        title: 'Rastreo de Transacciones',
+        href: '/reports/transactions',
+        icon: ClipboardList,
+    },
+];
+
 const intercompaniaItems: NavItem[] = [];
 
 export function AppSidebar() {
@@ -81,6 +89,7 @@ export function AppSidebar() {
                 <NavMain items={bankingItems} label="Opciones de bancos" />
                 <NavMain items={conciliacionItems} label="Conciliación Bancaria" />
                 <NavMain items={pagosItems} label="Pagos" />
+                <NavMain items={reportItems} label="Reportes" />
                 <NavMain items={intercompaniaItems} label="Procesos Intercompañía" />
             </SidebarContent>
 

@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Enums\BatchStatus;
 use App\Models\Batch;
+use App\Models\Transaction;
 use App\Services\SapServiceLayer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -48,6 +49,27 @@ class ProcessBatchToSapJob implements ShouldQueue
             $this->batch->update([
                 'status' => BatchStatus::Failed,
                 'error_message' => 'El lote no tiene sucursal o cuenta bancaria asociada',
+            ]);
+
+            return;
+        }
+
+        // Mark duplicate transactions that were already processed in previous batches
+        $duplicatesSkipped = $this->markDuplicateTransactions();
+
+        // If all transactions were duplicates, complete without connecting to SAP
+        $remainingCount = $this->batch->transactions->whereNull('sap_number')->count();
+        if ($remainingCount === 0) {
+            Log::info('All transactions are duplicates, skipping SAP processing', [
+                'batch_id' => $this->batch->id,
+                'duplicates_skipped' => $duplicatesSkipped,
+            ]);
+
+            $this->batch->update([
+                'status' => BatchStatus::Completed,
+                'error_message' => $duplicatesSkipped > 0
+                    ? "Se omitieron {$duplicatesSkipped} transacciones duplicadas (ya procesadas en lotes anteriores)"
+                    : null,
             ]);
 
             return;
@@ -136,15 +158,99 @@ class ProcessBatchToSapJob implements ShouldQueue
         $sap->logout();
 
         // Update batch status
+        $errorMessage = null;
+        if ($hasErrors && $duplicatesSkipped > 0) {
+            $errorMessage = "Algunas transacciones fallaron. Se omitieron {$duplicatesSkipped} duplicadas.";
+        } elseif ($hasErrors) {
+            $errorMessage = 'Algunas transacciones no pudieron ser procesadas';
+        } elseif ($duplicatesSkipped > 0) {
+            $errorMessage = "Se omitieron {$duplicatesSkipped} transacciones duplicadas (ya procesadas en lotes anteriores)";
+        }
+
         $this->batch->update([
             'status' => $hasErrors ? BatchStatus::Failed : BatchStatus::Completed,
-            'error_message' => $hasErrors ? 'Algunas transacciones no pudieron ser procesadas' : null,
+            'error_message' => $errorMessage,
         ]);
 
         Log::info('Batch SAP processing completed', [
             'batch_id' => $this->batch->id,
             'status' => $hasErrors ? 'failed' : 'completed',
+            'duplicates_skipped' => $duplicatesSkipped,
         ]);
+    }
+
+    /**
+     * Detect and mark transactions that already exist processed in previous batches
+     * for the same bank account. Uses FIFO counting to handle legitimate duplicates
+     * within the same batch (e.g. multiple identical bank fees on the same day).
+     */
+    private function markDuplicateTransactions(): int
+    {
+        $unprocessed = $this->batch->transactions->filter(fn ($t) => $t->sap_number === null);
+
+        if ($unprocessed->isEmpty()) {
+            return 0;
+        }
+
+        $makeKey = fn ($date, $memo, $debit, $credit) => ($date instanceof \Carbon\Carbon ? $date->format('Y-m-d') : (string) $date)
+            .'|'.$memo
+            .'|'.($debit ?? '0')
+            .'|'.($credit ?? '0');
+
+        // Count already-processed transactions per signature for this bank account
+        $existingCounts = Transaction::query()
+            ->join('batches', 'batches.id', '=', 'transactions.batch_id')
+            ->where('batches.bank_account_id', $this->batch->bank_account_id)
+            ->where('transactions.batch_id', '!=', $this->batch->id)
+            ->whereNotNull('transactions.sap_number')
+            ->where('transactions.sap_number', '>', 0)
+            ->selectRaw('transactions.due_date, transactions.memo, transactions.debit_amount, transactions.credit_amount, COUNT(*) as cnt')
+            ->groupBy('transactions.due_date', 'transactions.memo', 'transactions.debit_amount', 'transactions.credit_amount')
+            ->get()
+            ->mapWithKeys(fn ($row) => [
+                $makeKey($row->due_date, $row->memo, $row->debit_amount, $row->credit_amount) => (int) $row->cnt,
+            ])
+            ->all();
+
+        if (empty($existingCounts)) {
+            return 0;
+        }
+
+        // Group unprocessed transactions by signature
+        $grouped = $unprocessed->groupBy(
+            fn ($t) => $makeKey($t->due_date, $t->memo, $t->debit_amount, $t->credit_amount)
+        );
+
+        $skipped = 0;
+
+        foreach ($grouped as $key => $transactions) {
+            $existingCount = $existingCounts[$key] ?? 0;
+
+            if ($existingCount <= 0) {
+                continue;
+            }
+
+            // Mark up to existingCount transactions as duplicates (FIFO)
+            $toSkip = min($existingCount, $transactions->count());
+
+            foreach ($transactions->take($toSkip) as $transaction) {
+                $transaction->update([
+                    'sap_number' => 0,
+                    'error' => 'Omitido: transacción duplicada (ya procesada en un lote anterior)',
+                ]);
+                $skipped++;
+            }
+
+            Log::info('Duplicate transactions detected', [
+                'batch_id' => $this->batch->id,
+                'signature' => $key,
+                'existing_count' => $existingCount,
+                'new_count' => $transactions->count(),
+                'skipped' => $toSkip,
+            ]);
+        }
+
+        return $skipped;
     }
 
     /**

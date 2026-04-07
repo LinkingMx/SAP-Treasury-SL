@@ -660,7 +660,11 @@ class SapServiceLayer
             return ['success' => false, 'doc_entry' => null, 'error' => 'Not logged in to SAP Service Layer'];
         }
 
-        $endpoint = $invoiceType === 'it_PurchaseInvoice' ? 'PurchaseInvoices' : 'PurchaseCreditNotes';
+        $endpoint = match ($invoiceType) {
+            'it_PurchaseInvoice' => 'PurchaseInvoices',
+            'it_PurchaseDownPayment' => 'PurchaseDownPayments',
+            default => 'PurchaseCreditNotes',
+        };
 
         try {
             $response = Http::withoutVerifying()

@@ -4,6 +4,7 @@ use App\Http\Controllers\AfirmeController;
 use App\Http\Controllers\AiIngestController;
 use App\Http\Controllers\BankStatementController;
 use App\Http\Controllers\BatchController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ReconciliationController;
 use App\Models\Bank;
 use App\Models\BankAccount;
@@ -13,9 +14,8 @@ use Inertia\Inertia;
 Route::redirect('/', '/dashboard')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::get('dashboard', function () {
-        return Inertia::render('dashboard');
-    })->name('dashboard');
+    Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('dashboard/stats', [DashboardController::class, 'stats'])->name('dashboard.stats');
 
     Route::get('treasury', function () {
         $branchIds = auth()->user()->branches()->pluck('branches.id');

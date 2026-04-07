@@ -90,7 +90,6 @@ export function AppSidebar() {
                 <NavMain items={conciliacionItems} label="Conciliación Bancaria" />
                 <NavMain items={pagosItems} label="Pagos" />
                 <NavMain items={reportItems} label="Reportes" />
-                <NavMain items={intercompaniaItems} label="Procesos Intercompañía" />
             </SidebarContent>
 
             <SidebarFooter>

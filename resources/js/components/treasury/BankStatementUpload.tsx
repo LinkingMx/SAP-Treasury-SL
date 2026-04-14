@@ -138,6 +138,27 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [statementToDelete, setStatementToDelete] = useState<BankStatementHistory | null>(null);
 
+    // Duplicate check state
+    const [duplicateCheckLoading, setDuplicateCheckLoading] = useState(false);
+    const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
+    const [duplicateData, setDuplicateData] = useState<{
+        duplicates: Array<{
+            index: number;
+            due_date: string;
+            memo: string;
+            debit_amount: number;
+            credit_amount: number;
+            existing_statement_number: string;
+            existing_filename: string;
+        }>;
+        matched_statements: Array<{
+            statement_id: number;
+            statement_number: string;
+            statement_date: string;
+            original_filename: string;
+        }>;
+    } | null>(null);
+
     // Detail modal state
     const [detailOpen, setDetailOpen] = useState(false);
     const [detailLoading, setDetailLoading] = useState(false);
@@ -437,8 +458,60 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
     const handleSendToSap = async () => {
         if (!selectedBranch || !selectedBankAccount || !statementDate || transactions.length === 0) return;
 
+        // First check for duplicates
+        setDuplicateCheckLoading(true);
+        setErrorMessage(null);
+
+        try {
+            const checkResponse = await fetch('/treasury/bank-statements/check-duplicates', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    Accept: 'application/json',
+                },
+                body: JSON.stringify({
+                    bank_account_id: selectedBankAccount,
+                    transactions: transactions.map((t) => ({
+                        due_date: t.due_date,
+                        memo: t.memo,
+                        debit_amount: t.debit_amount,
+                        credit_amount: t.credit_amount,
+                    })),
+                }),
+            });
+
+            const checkData = await checkResponse.json();
+
+            if (checkResponse.ok && checkData.has_duplicates) {
+                setDuplicateData({
+                    duplicates: checkData.duplicates,
+                    matched_statements: checkData.matched_statements,
+                });
+                setDuplicateDialogOpen(true);
+                setDuplicateCheckLoading(false);
+                return;
+            }
+        } catch (error) {
+            console.error('Duplicate check error:', error);
+            // If check fails, proceed with send anyway (non-blocking)
+        } finally {
+            setDuplicateCheckLoading(false);
+        }
+
+        // No duplicates found, proceed with send
+        await executeSendToSap();
+    };
+
+    const executeSendToSap = async (transactionsToSend?: typeof transactions) => {
+        if (!selectedBranch || !selectedBankAccount || !statementDate) return;
+
+        const txToSend = transactionsToSend || transactions;
+        if (txToSend.length === 0) return;
+
         setStatus('sending');
         setErrorMessage(null);
+        setDuplicateDialogOpen(false);
 
         try {
             const response = await fetch('/treasury/bank-statements/send', {
@@ -453,7 +526,7 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                     bank_account_id: selectedBankAccount,
                     statement_date: statementDate,
                     filename: selectedFile?.name || 'unknown.xlsx',
-                    transactions: transactions.map((t) => ({
+                    transactions: txToSend.map((t) => ({
                         due_date: t.due_date,
                         memo: t.memo,
                         debit_amount: t.debit_amount,
@@ -483,6 +556,13 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
             setErrorMessage(error instanceof Error ? error.message : 'Error al enviar.');
             setStatus('review');
         }
+    };
+
+    const handleSendWithoutDuplicates = () => {
+        if (!duplicateData) return;
+        const duplicateIndices = new Set(duplicateData.duplicates.map((d) => d.index));
+        const filtered = transactions.filter((_, i) => !duplicateIndices.has(i));
+        executeSendToSap(filtered);
     };
 
     const formatCurrency = (value: number | string | null | undefined): string => {
@@ -749,13 +829,18 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                 <div className="flex justify-end gap-2">
                     <Button
                         onClick={handleSendToSap}
-                        disabled={status === 'sending' || transactions.length === 0}
+                        disabled={status === 'sending' || duplicateCheckLoading || transactions.length === 0}
                         size="lg"
                     >
                         {status === 'sending' ? (
                             <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 Enviando a SAP...
+                            </>
+                        ) : duplicateCheckLoading ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Verificando duplicados...
                             </>
                         ) : (
                             <>
@@ -765,6 +850,88 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                         )}
                     </Button>
                 </div>
+
+                {/* Duplicate Warning Dialog */}
+                <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
+                    <DialogContent className="max-w-lg">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2 text-orange-500">
+                                <AlertTriangle className="h-5 w-5" />
+                                Duplicados detectados
+                            </DialogTitle>
+                            <DialogDescription>
+                                <strong className="text-foreground">{duplicateData?.duplicates.length} de {transactions.length}</strong> transacciones
+                                ya fueron enviadas a SAP.
+                                {transactions.length - (duplicateData?.duplicates.length ?? 0) > 0 && (
+                                    <> Las otras <strong className="text-foreground">{transactions.length - (duplicateData?.duplicates.length ?? 0)}</strong> son nuevas.</>
+                                )}
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-3">
+                            {duplicateData?.matched_statements && duplicateData.matched_statements.length > 0 && (
+                                <div className="rounded-md border border-orange-200 bg-orange-50 p-3 dark:border-orange-800/50 dark:bg-orange-950/20">
+                                    <p className="mb-1 text-xs font-medium text-orange-800 dark:text-orange-300">Coinciden con:</p>
+                                    {duplicateData.matched_statements.map((s) => (
+                                        <p key={s.statement_id} className="text-xs text-orange-700 dark:text-orange-400">
+                                            Folio <strong>{s.statement_number}</strong> - {s.original_filename}
+                                        </p>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="max-h-[180px] overflow-auto rounded-md border">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="w-20 text-xs">Fecha</TableHead>
+                                            <TableHead className="text-xs">Descripcion</TableHead>
+                                            <TableHead className="w-24 text-right text-xs">Monto</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {duplicateData?.duplicates.map((d, i) => (
+                                            <TableRow key={i}>
+                                                <TableCell className="text-xs">
+                                                    {new Date(d.due_date + 'T12:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' })}
+                                                </TableCell>
+                                                <TableCell className="max-w-[180px] truncate text-xs" title={d.memo}>
+                                                    {d.memo}
+                                                </TableCell>
+                                                <TableCell className={cn('text-right text-xs font-medium', d.debit_amount ? 'text-red-500' : 'text-green-500')}>
+                                                    ${formatCurrency(d.debit_amount || d.credit_amount)}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2 border-t pt-4">
+                            {transactions.length - (duplicateData?.duplicates.length ?? 0) > 0 && (
+                                <Button onClick={handleSendWithoutDuplicates} className="w-full">
+                                    <Send className="mr-2 h-4 w-4" />
+                                    Enviar solo las {transactions.length - (duplicateData?.duplicates.length ?? 0)} no duplicadas
+                                </Button>
+                            )}
+                            <Button
+                                variant="outline"
+                                className="w-full border-destructive text-destructive hover:bg-destructive/10"
+                                onClick={() => executeSendToSap()}
+                            >
+                                Enviar todas ({transactions.length}) incluyendo duplicadas
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                className="w-full"
+                                onClick={() => setDuplicateDialogOpen(false)}
+                            >
+                                Cancelar
+                            </Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </div>
         );
     }

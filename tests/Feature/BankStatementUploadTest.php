@@ -204,3 +204,179 @@ test('bank statement factory failed state works correctly', function () {
     expect($statement->sap_doc_entry)->toBeNull();
     expect($statement->sap_error)->not->toBeNull();
 });
+
+test('check-duplicates detects duplicate transactions', function () {
+    $user = User::factory()->create();
+    $branch = Branch::factory()->create();
+    $bankAccount = BankAccount::factory()->withSapBankKey()->create([
+        'branch_id' => $branch->id,
+    ]);
+    $user->branches()->attach($branch->id);
+
+    // Create an existing sent statement with known transactions in payload
+    BankStatement::factory()->sent()->create([
+        'branch_id' => $branch->id,
+        'bank_account_id' => $bankAccount->id,
+        'user_id' => $user->id,
+        'statement_number' => '2026-04-001',
+        'payload' => [
+            'BankPages' => [
+                [
+                    'DueDate' => '2026-04-01T00:00:00Z',
+                    'DebitAmount' => 1500.50,
+                    'CreditAmount' => 0,
+                    'Memo' => '[001] PAGO NOMINA REF 12345',
+                    'AccountCode' => '11200001',
+                    'Reference' => 'Egreso',
+                ],
+                [
+                    'DueDate' => '2026-04-02T00:00:00Z',
+                    'DebitAmount' => 0,
+                    'CreditAmount' => 3000.00,
+                    'Memo' => '[002] DEPOSITO CLIENTE ABC',
+                    'AccountCode' => '11200001',
+                    'Reference' => 'Ingreso',
+                ],
+            ],
+        ],
+    ]);
+
+    // Send transactions that match the existing ones
+    $response = $this->actingAs($user)
+        ->postJson(route('bank-statements.check-duplicates'), [
+            'bank_account_id' => $bankAccount->id,
+            'transactions' => [
+                [
+                    'due_date' => '2026-04-01',
+                    'memo' => 'PAGO NOMINA REF 12345',
+                    'debit_amount' => 1500.50,
+                    'credit_amount' => 0,
+                ],
+                [
+                    'due_date' => '2026-04-03',
+                    'memo' => 'TRANSACCION NUEVA',
+                    'debit_amount' => 500,
+                    'credit_amount' => 0,
+                ],
+            ],
+        ])
+        ->assertOk();
+
+    expect($response->json('has_duplicates'))->toBeTrue();
+    expect($response->json('duplicates'))->toHaveCount(1);
+    expect($response->json('duplicates.0.existing_statement_number'))->toBe('2026-04-001');
+    expect($response->json('duplicates.0.debit_amount'))->toBe(1500.50);
+});
+
+test('check-duplicates returns no duplicates when none exist', function () {
+    $user = User::factory()->create();
+    $branch = Branch::factory()->create();
+    $bankAccount = BankAccount::factory()->withSapBankKey()->create([
+        'branch_id' => $branch->id,
+    ]);
+    $user->branches()->attach($branch->id);
+
+    // Create an existing sent statement
+    BankStatement::factory()->sent()->create([
+        'branch_id' => $branch->id,
+        'bank_account_id' => $bankAccount->id,
+        'user_id' => $user->id,
+        'payload' => [
+            'BankPages' => [
+                [
+                    'DueDate' => '2026-04-01T00:00:00Z',
+                    'DebitAmount' => 1500.50,
+                    'CreditAmount' => 0,
+                    'Memo' => '[001] PAGO NOMINA REF 12345',
+                    'AccountCode' => '11200001',
+                    'Reference' => 'Egreso',
+                ],
+            ],
+        ],
+    ]);
+
+    $response = $this->actingAs($user)
+        ->postJson(route('bank-statements.check-duplicates'), [
+            'bank_account_id' => $bankAccount->id,
+            'transactions' => [
+                [
+                    'due_date' => '2026-04-05',
+                    'memo' => 'TRANSACCION COMPLETAMENTE DIFERENTE',
+                    'debit_amount' => 999.99,
+                    'credit_amount' => 0,
+                ],
+            ],
+        ])
+        ->assertOk();
+
+    expect($response->json('has_duplicates'))->toBeFalse();
+    expect($response->json('duplicates'))->toBeEmpty();
+});
+
+test('check-duplicates ignores cancelled statements', function () {
+    $user = User::factory()->create();
+    $branch = Branch::factory()->create();
+    $bankAccount = BankAccount::factory()->withSapBankKey()->create([
+        'branch_id' => $branch->id,
+    ]);
+    $user->branches()->attach($branch->id);
+
+    // Create a cancelled statement — should be ignored
+    BankStatement::factory()->create([
+        'branch_id' => $branch->id,
+        'bank_account_id' => $bankAccount->id,
+        'user_id' => $user->id,
+        'status' => \App\Enums\BankStatementStatus::Cancelled,
+        'payload' => [
+            'BankPages' => [
+                [
+                    'DueDate' => '2026-04-01T00:00:00Z',
+                    'DebitAmount' => 1500.50,
+                    'CreditAmount' => 0,
+                    'Memo' => '[001] PAGO NOMINA REF 12345',
+                    'AccountCode' => '11200001',
+                    'Reference' => 'Egreso',
+                ],
+            ],
+        ],
+    ]);
+
+    $response = $this->actingAs($user)
+        ->postJson(route('bank-statements.check-duplicates'), [
+            'bank_account_id' => $bankAccount->id,
+            'transactions' => [
+                [
+                    'due_date' => '2026-04-01',
+                    'memo' => 'PAGO NOMINA REF 12345',
+                    'debit_amount' => 1500.50,
+                    'credit_amount' => 0,
+                ],
+            ],
+        ])
+        ->assertOk();
+
+    expect($response->json('has_duplicates'))->toBeFalse();
+});
+
+test('check-duplicates requires authorization', function () {
+    $user = User::factory()->create();
+    $branch = Branch::factory()->create();
+    $bankAccount = BankAccount::factory()->withSapBankKey()->create([
+        'branch_id' => $branch->id,
+    ]);
+    // User NOT attached to branch
+
+    $this->actingAs($user)
+        ->postJson(route('bank-statements.check-duplicates'), [
+            'bank_account_id' => $bankAccount->id,
+            'transactions' => [
+                [
+                    'due_date' => '2026-04-01',
+                    'memo' => 'Test',
+                    'debit_amount' => 100,
+                    'credit_amount' => 0,
+                ],
+            ],
+        ])
+        ->assertForbidden();
+});

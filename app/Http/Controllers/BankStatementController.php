@@ -116,6 +116,41 @@ class BankStatementController extends Controller
     }
 
     /**
+     * Check for duplicate transactions against existing sent bank statements.
+     */
+    public function checkDuplicates(Request $request): JsonResponse
+    {
+        $request->validate([
+            'bank_account_id' => 'required|exists:bank_accounts,id',
+            'transactions' => 'required|array|min:1',
+            'transactions.*.due_date' => 'required|date',
+            'transactions.*.memo' => 'required|string',
+            'transactions.*.debit_amount' => 'nullable|numeric|min:0',
+            'transactions.*.credit_amount' => 'nullable|numeric|min:0',
+        ]);
+
+        $bankAccount = BankAccount::findOrFail($request->input('bank_account_id'));
+
+        // Verify user has access to the bank account's branch
+        if (! $request->user()->branches()->where('branches.id', $bankAccount->branch_id)->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No tienes acceso a esta sucursal.',
+            ], 403);
+        }
+
+        $result = $this->bankStatementService->checkDuplicates(
+            $bankAccount->id,
+            $request->input('transactions')
+        );
+
+        return response()->json([
+            'success' => true,
+            ...$result,
+        ]);
+    }
+
+    /**
      * Send bank statement to SAP.
      */
     public function send(Request $request): JsonResponse

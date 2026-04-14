@@ -340,6 +340,113 @@ class BankStatementService
     }
 
     /**
+     * Check for duplicate transactions against existing sent bank statements.
+     *
+     * @param  int  $bankAccountId  The bank account to check against
+     * @param  array  $transactions  Incoming transactions [{due_date, memo, debit_amount, credit_amount}, ...]
+     * @return array{has_duplicates: bool, duplicates: array, matched_statements: array}
+     */
+    public function checkDuplicates(int $bankAccountId, array $transactions): array
+    {
+        // Get all sent (non-cancelled) statements for this bank account
+        $existingStatements = BankStatement::where('bank_account_id', $bankAccountId)
+            ->where('status', BankStatementStatus::Sent)
+            ->get(['id', 'statement_number', 'statement_date', 'original_filename', 'payload']);
+
+        if ($existingStatements->isEmpty()) {
+            return ['has_duplicates' => false, 'duplicates' => [], 'matched_statements' => []];
+        }
+
+        // Build a lookup of existing transactions: fingerprint => [statement info]
+        $existingFingerprints = [];
+        foreach ($existingStatements as $statement) {
+            $bankPages = $statement->payload['BankPages'] ?? [];
+            foreach ($bankPages as $row) {
+                $fp = $this->transactionFingerprint(
+                    $this->extractDateFromSapRow($row),
+                    (float) ($row['DebitAmount'] ?? 0),
+                    (float) ($row['CreditAmount'] ?? 0),
+                    $this->stripMemoPrefix($row['Memo'] ?? '')
+                );
+                $existingFingerprints[$fp][] = [
+                    'statement_id' => $statement->id,
+                    'statement_number' => $statement->statement_number,
+                    'statement_date' => $statement->statement_date->format('Y-m-d'),
+                    'original_filename' => $statement->original_filename,
+                ];
+            }
+        }
+
+        // Check incoming transactions against existing fingerprints
+        $duplicates = [];
+        $matchedStatementIds = [];
+        foreach ($transactions as $index => $tx) {
+            $fp = $this->transactionFingerprint(
+                $tx['due_date'],
+                (float) ($tx['debit_amount'] ?? 0),
+                (float) ($tx['credit_amount'] ?? 0),
+                $tx['memo'] ?? ''
+            );
+
+            if (isset($existingFingerprints[$fp])) {
+                $match = $existingFingerprints[$fp][0];
+                $duplicates[] = [
+                    'index' => $index,
+                    'due_date' => $tx['due_date'],
+                    'memo' => mb_substr($tx['memo'] ?? '', 0, 80),
+                    'debit_amount' => (float) ($tx['debit_amount'] ?? 0),
+                    'credit_amount' => (float) ($tx['credit_amount'] ?? 0),
+                    'existing_statement_number' => $match['statement_number'],
+                    'existing_filename' => $match['original_filename'],
+                ];
+                $matchedStatementIds[$match['statement_id']] = $match;
+            }
+        }
+
+        return [
+            'has_duplicates' => ! empty($duplicates),
+            'duplicates' => $duplicates,
+            'matched_statements' => array_values($matchedStatementIds),
+        ];
+    }
+
+    /**
+     * Generate a fingerprint for a transaction based on date, amounts, and memo.
+     */
+    protected function transactionFingerprint(string $date, float $debit, float $credit, string $memo): string
+    {
+        // Normalize date to Y-m-d
+        $normalizedDate = Carbon::parse($date)->format('Y-m-d');
+
+        // Round amounts to 2 decimals
+        $debit = round($debit, 2);
+        $credit = round($credit, 2);
+
+        // Normalize memo: lowercase, collapse whitespace, trim
+        $normalizedMemo = mb_strtolower(trim(preg_replace('/\s+/', ' ', $memo)));
+
+        return md5("{$normalizedDate}|{$debit}|{$credit}|{$normalizedMemo}");
+    }
+
+    /**
+     * Extract a Y-m-d date from a SAP row's DueDate field.
+     */
+    protected function extractDateFromSapRow(array $row): string
+    {
+        $date = $row['DueDate'] ?? $row['Date'] ?? '';
+
+        return Carbon::parse($date)->format('Y-m-d');
+    }
+
+    /**
+     * Strip the [XXX] prefix that was added during SAP transformation.
+     */
+    protected function stripMemoPrefix(string $memo): string
+    {
+        return preg_replace('/^\[\d+\]\s*/', '', $memo);
+    }
+
+    /**
      * Get bank statement history for a branch.
      *
      * @return \Illuminate\Database\Eloquent\Collection

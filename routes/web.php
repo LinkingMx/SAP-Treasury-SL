@@ -50,6 +50,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::prefix('treasury/bank-statements')->name('bank-statements.')->group(function () {
         Route::post('analyze', [BankStatementController::class, 'analyze'])->name('analyze');
         Route::post('preview', [BankStatementController::class, 'preview'])->name('preview');
+        Route::post('check-duplicates', [BankStatementController::class, 'checkDuplicates'])->name('check-duplicates');
         Route::post('send', [BankStatementController::class, 'send'])->name('send');
         Route::get('history', [BankStatementController::class, 'history'])->name('history');
         Route::get('{bankStatement}', [BankStatementController::class, 'show'])->name('show');

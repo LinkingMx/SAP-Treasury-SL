@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class VendorPaymentInvoice extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'batch_id',
         'card_code',
@@ -18,6 +21,7 @@ class VendorPaymentInvoice extends Model
         'doc_entry',
         'invoice_type',
         'sum_applied',
+        'proveedor_ref',
         'sap_doc_num',
         'error',
     ];

@@ -32,6 +32,7 @@ class VendorPaymentsTemplateExport implements FromCollection, WithStyles
                 'DocNum',
                 'InvoiceType',
                 'SumApplied',
+                'ProveedorREF',
             ],
 
             // Example data rows
@@ -44,6 +45,7 @@ class VendorPaymentsTemplateExport implements FromCollection, WithStyles
                 42936,
                 'it_PurchaseInvoice',
                 135508.89,
+                'IN3456',
             ],
             [
                 'P0172',
@@ -54,6 +56,7 @@ class VendorPaymentsTemplateExport implements FromCollection, WithStyles
                 42925,
                 'it_PurchaseInvoice',
                 2939.68,
+                'IN346556',
             ],
             [
                 'P0285',
@@ -64,6 +67,7 @@ class VendorPaymentsTemplateExport implements FromCollection, WithStyles
                 43001,
                 'it_PurchaseInvoice',
                 5000.00,
+                'IN5646',
             ],
         ]);
     }
@@ -79,6 +83,7 @@ class VendorPaymentsTemplateExport implements FromCollection, WithStyles
         $sheet->getColumnDimension('F')->setWidth(12);
         $sheet->getColumnDimension('G')->setWidth(22);
         $sheet->getColumnDimension('H')->setWidth(15);
+        $sheet->getColumnDimension('I')->setWidth(18);
 
         return [
             // Row 1: Title - bold and centered

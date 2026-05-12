@@ -102,6 +102,7 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
                         'doc_entry' => (int) $rowArray['docnum'],
                         'invoice_type' => $rowArray['invoicetype'] ?? 'it_PurchaseInvoice',
                         'sum_applied' => $this->parseAmount($rowArray['sumapplied']),
+                        'proveedor_ref' => trim($rowArray['proveedorref']),
                     ]);
                 }
             }
@@ -113,7 +114,7 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
      */
     protected function normalizeRow(array $row): array
     {
-        foreach (['cardcode', 'cardname', 'transferaccount', 'invoicetype'] as $field) {
+        foreach (['cardcode', 'cardname', 'transferaccount', 'invoicetype', 'proveedorref'] as $field) {
             if (isset($row[$field]) && ! is_string($row[$field])) {
                 $row[$field] = (string) $row[$field];
             }
@@ -135,6 +136,7 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
             'docnum' => ['required', 'integer'],
             'invoicetype' => ['nullable', 'string', 'max:50'],
             'sumapplied' => ['required', 'numeric', 'gt:0'],
+            'proveedorref' => ['required', 'string', 'max:100'],
         ], [
             'cardcode.required' => 'El código del proveedor es requerido',
             'cardcode.string' => 'El código del proveedor debe ser texto',
@@ -147,6 +149,9 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
             'sumapplied.required' => 'El monto a pagar es requerido',
             'sumapplied.numeric' => 'El monto a pagar debe ser un número',
             'sumapplied.gt' => 'El monto a pagar debe ser mayor a 0',
+            'proveedorref.required' => 'La referencia del proveedor (ProveedorREF) es requerida',
+            'proveedorref.string' => 'La referencia del proveedor debe ser texto',
+            'proveedorref.max' => 'La referencia del proveedor no debe exceder 100 caracteres',
         ]);
 
         if ($validator->fails()) {

@@ -1,0 +1,31 @@
+<?php
+
+namespace Database\Factories;
+
+use App\Enums\VendorPaymentBatchStatus;
+use App\Models\BankAccount;
+use App\Models\Branch;
+use App\Models\User;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+/**
+ * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\VendorPaymentBatch>
+ */
+class VendorPaymentBatchFactory extends Factory
+{
+    public function definition(): array
+    {
+        return [
+            'branch_id' => Branch::factory(),
+            'bank_account_id' => BankAccount::factory(),
+            'user_id' => User::factory(),
+            'filename' => fake()->word().'.xlsx',
+            'process_date' => now()->toDateString(),
+            'total_invoices' => fake()->numberBetween(1, 20),
+            'total_payments' => fake()->numberBetween(1, 10),
+            'total_amount' => fake()->randomFloat(2, 1000, 100000),
+            'status' => VendorPaymentBatchStatus::Pending,
+            'processed_at' => now(),
+        ];
+    }
+}

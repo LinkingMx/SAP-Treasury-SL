@@ -738,6 +738,7 @@ class SapServiceLayer
         // Build PaymentInvoices array
         $paymentInvoices = [];
         $transferSum = 0;
+        $refs = [];
 
         foreach ($invoices as $invoice) {
             $paymentInvoices[] = [
@@ -748,6 +749,21 @@ class SapServiceLayer
             ];
 
             $transferSum += (float) $invoice->sum_applied;
+
+            if (! empty($invoice->proveedor_ref)) {
+                $refs[] = $invoice->proveedor_ref;
+            }
+        }
+
+        // SAP B1 OutgoingPayments.Comments is limited to 254 chars
+        $rawComments = implode(', ', $refs);
+        $comments = mb_substr($rawComments, 0, 254);
+
+        if (mb_strlen($rawComments) > 254) {
+            Log::warning('SAP VendorPayment Comments truncated to 254 chars', [
+                'card_code' => $cardCode,
+                'original_length' => mb_strlen($rawComments),
+            ]);
         }
 
         // Build payload
@@ -759,6 +775,10 @@ class SapServiceLayer
             'TransferDate' => $transferDate,
             'PaymentInvoices' => $paymentInvoices,
         ];
+
+        if ($comments !== '') {
+            $payload['Comments'] = $comments;
+        }
 
         if ($bplId !== null) {
             $payload['BPLID'] = $bplId;

@@ -104,6 +104,28 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('batches/error-log', [App\Http\Controllers\VendorPaymentController::class, 'downloadErrorLog'])->name('error-log');
     });
 
+    // Cobros a Clientes (IncomingPayments)
+    Route::get('payments/customers', function () {
+        $branchIds = auth()->user()->branches()->pluck('branches.id');
+
+        return Inertia::render('payments/customers', [
+            'branches' => auth()->user()->branches()->get(['branches.id', 'branches.name']),
+            'bankAccounts' => BankAccount::whereIn('branch_id', $branchIds)
+                ->get(['id', 'branch_id', 'name', 'account']),
+        ]);
+    })->name('payments.customers');
+
+    Route::prefix('payments/customers')->name('customer-payments.')->group(function () {
+        Route::get('batches', [App\Http\Controllers\CustomerPaymentController::class, 'index'])->name('index');
+        Route::get('batches/{batch}', [App\Http\Controllers\CustomerPaymentController::class, 'show'])->name('show');
+        Route::post('batches', [App\Http\Controllers\CustomerPaymentController::class, 'store'])->name('store');
+        Route::delete('batches/{batch}', [App\Http\Controllers\CustomerPaymentController::class, 'destroy'])->name('destroy');
+        Route::post('batches/{batch}/process', [App\Http\Controllers\CustomerPaymentController::class, 'processToSap'])->name('process');
+        Route::post('batches/{batch}/payments/{cardCode}/reprocess', [App\Http\Controllers\CustomerPaymentController::class, 'reprocessPayment'])->name('reprocess');
+        Route::get('template/download', [App\Http\Controllers\CustomerPaymentController::class, 'downloadTemplate'])->name('template');
+        Route::post('batches/error-log', [App\Http\Controllers\CustomerPaymentController::class, 'downloadErrorLog'])->name('error-log');
+    });
+
     // Reports
     Route::get('reports/transactions', [App\Http\Controllers\ReportController::class, 'transactions'])->name('reports.transactions');
     Route::get('reports/transactions/data', [App\Http\Controllers\ReportController::class, 'transactionsData'])->name('reports.transactions.data');

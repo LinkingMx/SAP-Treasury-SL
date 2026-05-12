@@ -429,7 +429,7 @@ PROMPT;
         try {
             /** @var GeminiClient $gemini */
             $gemini = app('gemini');
-            $result = $gemini->generativeModel('gemini-2.0-flash')->generateContent($prompt);
+            $result = $gemini->generativeModel('gemini-2.5-flash')->generateContent($prompt);
             $responseText = $result->text();
 
             // Save AI response to file for debugging
@@ -656,7 +656,7 @@ PROMPT;
         try {
             /** @var GeminiClient $gemini */
             $gemini = app('gemini');
-            $result = $gemini->generativeModel('gemini-2.0-flash')->generateContent($prompt);
+            $result = $gemini->generativeModel('gemini-2.5-flash')->generateContent($prompt);
             $responseText = trim($result->text());
 
             // Save for debugging

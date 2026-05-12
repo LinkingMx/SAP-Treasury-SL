@@ -14,7 +14,7 @@ import { upload } from '@/routes/reconciliation';
 import { sap as pagosSap } from '@/routes/payments';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { Building2, ClipboardList, FileSearch, FileSpreadsheet, FileText, Landmark, LayoutGrid, Wallet } from 'lucide-react';
+import { Building2, ClipboardList, FileSearch, FileSpreadsheet, FileText, HandCoins, Landmark, LayoutGrid, Wallet } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const platformItems: NavItem[] = [
@@ -56,6 +56,11 @@ const pagosItems: NavItem[] = [
         title: 'Pagos a SAP',
         href: pagosSap(),
         icon: Wallet,
+    },
+    {
+        title: 'Cobros de Clientes',
+        href: '/payments/customers',
+        icon: HandCoins,
     },
 ];
 

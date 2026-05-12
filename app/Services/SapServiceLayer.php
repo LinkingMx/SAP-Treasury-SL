@@ -820,4 +820,173 @@ class SapServiceLayer
             ];
         }
     }
+
+    /**
+     * Resolve a customer-side DocNum to DocEntry via SAP Service Layer.
+     *
+     * @return array{success: bool, doc_entry: int|null, error: string|null}
+     */
+    public function resolveCustomerDocEntry(string $cardCode, int $docNum, string $invoiceType = 'it_Invoice'): array
+    {
+        if (! $this->sessionId) {
+            return ['success' => false, 'doc_entry' => null, 'error' => 'Not logged in to SAP Service Layer'];
+        }
+
+        $endpoint = match ($invoiceType) {
+            'it_Invoice' => 'Invoices',
+            'it_DownPayment' => 'DownPayments',
+            default => 'CreditNotes',
+        };
+
+        try {
+            $response = Http::withoutVerifying()
+                ->withOptions(['verify' => false])
+                ->timeout(30)
+                ->withCookies(['B1SESSION' => $this->sessionId], parse_url($this->baseUrl, PHP_URL_HOST))
+                ->get("{$this->baseUrl}/{$endpoint}", [
+                    '$filter' => "DocNum eq {$docNum} and CardCode eq '{$cardCode}'",
+                    '$select' => 'DocEntry,DocNum,CardCode,DocTotal,PaidToDate,DocumentStatus',
+                ]);
+
+            if (! $response->successful()) {
+                return ['success' => false, 'doc_entry' => null, 'error' => "Error al consultar {$endpoint}: ".$response->json('error.message.value', 'Unknown')];
+            }
+
+            $results = $response->json('value', []);
+
+            if (empty($results)) {
+                return ['success' => false, 'doc_entry' => null, 'error' => "No se encontró factura DocNum {$docNum} para cliente {$cardCode}"];
+            }
+
+            $invoice = $results[0];
+
+            if ($invoice['DocumentStatus'] !== 'bost_Open') {
+                return ['success' => false, 'doc_entry' => null, 'error' => "La factura DocNum {$docNum} está cerrada o cancelada en SAP"];
+            }
+
+            $balance = $invoice['DocTotal'] - $invoice['PaidToDate'];
+            if ($balance <= 0) {
+                return ['success' => false, 'doc_entry' => null, 'error' => "La factura DocNum {$docNum} ya está cobrada en su totalidad"];
+            }
+
+            return ['success' => true, 'doc_entry' => (int) $invoice['DocEntry'], 'error' => null];
+
+        } catch (ConnectionException $e) {
+            return ['success' => false, 'doc_entry' => null, 'error' => 'Connection error: '.$e->getMessage()];
+        }
+    }
+
+    /**
+     * Create an Incoming Payment (customer payment) in SAP.
+     *
+     * @param  array  $invoices  Array of CustomerPaymentInvoice grouped by CardCode
+     * @return array{success: bool, doc_num: int|null, error: string|null}
+     */
+    public function createIncomingPayment(array $invoices, ?int $bplId = null, array $resolvedDocEntries = []): array
+    {
+        if (! $this->sessionId) {
+            return [
+                'success' => false,
+                'doc_num' => null,
+                'error' => 'Not logged in to SAP Service Layer',
+            ];
+        }
+
+        if (empty($invoices)) {
+            return [
+                'success' => false,
+                'doc_num' => null,
+                'error' => 'No invoices provided',
+            ];
+        }
+
+        $firstInvoice = $invoices[0];
+        $cardCode = $firstInvoice->card_code;
+        $docDate = $firstInvoice->doc_date->format('Y-m-d');
+        $transferDate = $firstInvoice->transfer_date->format('Y-m-d');
+        $transferAccount = $firstInvoice->transfer_account;
+
+        $paymentInvoices = [];
+        $transferSum = 0;
+
+        foreach ($invoices as $invoice) {
+            $paymentInvoices[] = [
+                'LineNum' => $invoice->line_num,
+                'DocEntry' => $resolvedDocEntries[$invoice->id] ?? $invoice->doc_entry,
+                'SumApplied' => (float) $invoice->sum_applied,
+                'InvoiceType' => $invoice->invoice_type,
+            ];
+
+            $transferSum += (float) $invoice->sum_applied;
+        }
+
+        $payload = [
+            'CardCode' => $cardCode,
+            'DocDate' => $docDate,
+            'TransferSum' => $transferSum,
+            'TransferAccount' => $transferAccount,
+            'TransferDate' => $transferDate,
+            'PaymentInvoices' => $paymentInvoices,
+        ];
+
+        if ($bplId !== null) {
+            $payload['BPLID'] = $bplId;
+        }
+
+        Log::info('SAP IncomingPayment payload', [
+            'card_code' => $cardCode,
+            'transfer_sum' => $transferSum,
+            'invoices_count' => count($paymentInvoices),
+        ]);
+
+        try {
+            $response = Http::withoutVerifying()
+                ->withOptions(['verify' => false])
+                ->timeout(30)
+                ->withCookies(['B1SESSION' => $this->sessionId], parse_url($this->baseUrl, PHP_URL_HOST))
+                ->post("{$this->baseUrl}/IncomingPayments", $payload);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                $docNum = $data['DocNum'] ?? null;
+
+                Log::info('SAP IncomingPayment created successfully', [
+                    'card_code' => $cardCode,
+                    'doc_num' => $docNum,
+                ]);
+
+                return [
+                    'success' => true,
+                    'doc_num' => $docNum,
+                    'error' => null,
+                ];
+            }
+
+            $errorMessage = $response->json('error.message.value', 'Unknown SAP error');
+            Log::error('SAP IncomingPayment creation failed', [
+                'card_code' => $cardCode,
+                'status' => $response->status(),
+                'error' => $errorMessage,
+                'payload' => $payload,
+            ]);
+
+            return [
+                'success' => false,
+                'doc_num' => null,
+                'error' => $errorMessage,
+            ];
+
+        } catch (ConnectionException $e) {
+            Log::error('SAP Connection failed during IncomingPayment creation', [
+                'card_code' => $cardCode,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'doc_num' => null,
+                'error' => 'Connection error: '.$e->getMessage(),
+            ];
+        }
+    }
 }

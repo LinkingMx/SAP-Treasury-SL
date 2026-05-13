@@ -19,7 +19,7 @@ function loginThenFakePaymentResponse(string $docNum = '100'): void
     ]);
 }
 
-it('sends Comments joined by ", " in row order', function () {
+it('sends Remarks joined by ", " in row order', function () {
     loginThenFakePaymentResponse();
 
     $sap = new SapServiceLayer;
@@ -52,11 +52,11 @@ it('sends Comments joined by ", " in row order', function () {
             return false;
         }
 
-        return $request['Comments'] === 'IN3456, IN346556, IN5646';
+        return $request['Remarks'] === 'IN3456, IN346556, IN5646';
     });
 });
 
-it('truncates Comments to 254 chars and logs a warning', function () {
+it('truncates Remarks to 254 chars and logs a warning', function () {
     loginThenFakePaymentResponse();
     Log::spy();
 
@@ -79,7 +79,7 @@ it('truncates Comments to 254 chars and logs a warning', function () {
             return false;
         }
 
-        return mb_strlen($request['Comments']) === 254;
+        return mb_strlen($request['Remarks']) === 254;
     });
 
     Log::shouldHaveReceived('warning')
@@ -87,7 +87,7 @@ it('truncates Comments to 254 chars and logs a warning', function () {
         ->once();
 });
 
-it('omits Comments when no proveedor_ref present', function () {
+it('omits Remarks when no proveedor_ref present', function () {
     loginThenFakePaymentResponse();
 
     $sap = new SapServiceLayer;
@@ -108,6 +108,6 @@ it('omits Comments when no proveedor_ref present', function () {
             return false;
         }
 
-        return ! array_key_exists('Comments', $request->data());
+        return ! array_key_exists('Remarks', $request->data());
     });
 });

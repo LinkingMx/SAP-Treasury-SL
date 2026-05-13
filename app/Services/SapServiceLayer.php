@@ -755,12 +755,12 @@ class SapServiceLayer
             }
         }
 
-        // SAP B1 OutgoingPayments.Comments is limited to 254 chars
+        // SAP B1 OutgoingPayments.Remarks (OVPM.Comments) is limited to 254 chars
         $rawComments = implode(', ', $refs);
         $comments = mb_substr($rawComments, 0, 254);
 
         if (mb_strlen($rawComments) > 254) {
-            Log::warning('SAP VendorPayment Comments truncated to 254 chars', [
+            Log::warning('SAP VendorPayment Remarks truncated to 254 chars', [
                 'card_code' => $cardCode,
                 'original_length' => mb_strlen($rawComments),
             ]);
@@ -777,7 +777,7 @@ class SapServiceLayer
         ];
 
         if ($comments !== '') {
-            $payload['Comments'] = $comments;
+            $payload['Remarks'] = $comments;
         }
 
         if ($bplId !== null) {

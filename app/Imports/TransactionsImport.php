@@ -128,7 +128,7 @@ class TransactionsImport implements ToCollection, WithHeadingRow
         $validator = Validator::make($row, [
             'sequence' => ['required', 'integer', 'min:1'],
             'duedate' => ['required'],
-            'memo' => ['required', 'string', 'max:255'],
+            'memo' => ['required', 'string'],
             'cuenta_contrapartida' => ['required', 'string', 'max:50'],
         ], [
             'sequence.required' => 'La secuencia es requerida',
@@ -136,6 +136,7 @@ class TransactionsImport implements ToCollection, WithHeadingRow
             'duedate.required' => 'La fecha es requerida',
             'memo.required' => 'El memo/descripción es requerido',
             'cuenta_contrapartida.required' => 'La cuenta contrapartida es requerida',
+            'cuenta_contrapartida.max' => 'La cuenta contrapartida no debe exceder 50 caracteres',
         ]);
 
         if ($validator->fails()) {

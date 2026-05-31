@@ -89,14 +89,55 @@ interface CashData {
     failed_branches: { company_db: string; branches: string[]; reason: string }[];
 }
 
+type AgingBucketKey = 'not_due' | '0_30' | '31_60' | '61_90' | '90_plus';
+
+interface AgingCompany {
+    company_db: string;
+    branches: string[];
+    buckets: Record<AgingBucketKey, number>;
+    open_total: number;
+    doc_count: number;
+}
+
+interface AgingData {
+    available: true;
+    kind: 'payables' | 'receivables';
+    currency: string;
+    as_of: string;
+    consolidated: {
+        open_total: number;
+        overdue_total: number;
+        doc_count: number;
+        buckets: Record<AgingBucketKey, number>;
+    };
+    by_company: AgingCompany[];
+    failed_branches: { company_db: string; branches: string[]; reason: string }[];
+}
+
 interface Props {
     branches: BranchOption[];
     filters: { branch_id: string; date_from: string; date_to: string };
     reconciliation?: ReconciliationData;
     cash?: CashData | UnavailableData;
-    payables?: UnavailableData | Record<string, unknown>;
-    receivables?: UnavailableData | Record<string, unknown>;
+    payables?: AgingData | UnavailableData;
+    receivables?: AgingData | UnavailableData;
 }
+
+const BUCKET_LABELS: Record<AgingBucketKey, string> = {
+    not_due: 'Por vencer',
+    '0_30': '0-30 días',
+    '31_60': '31-60 días',
+    '61_90': '61-90 días',
+    '90_plus': '90+ días',
+};
+
+const BUCKET_TONE: Record<AgingBucketKey, string> = {
+    not_due: 'text-foreground',
+    '0_30': 'text-amber-600 dark:text-amber-400',
+    '31_60': 'text-orange-600 dark:text-orange-400',
+    '61_90': 'text-rose-600 dark:text-rose-400',
+    '90_plus': 'text-rose-700 dark:text-rose-300 font-semibold',
+};
 
 function formatMXN(value: number): string {
     return new Intl.NumberFormat('es-MX', {
@@ -222,15 +263,15 @@ export default function Dashboard({ branches, filters }: Props) {
                     <CashContent />
                 </Deferred>
 
-                {/* AP / AR — SAP-backed, next phases */}
-                <div className="grid gap-4 lg:grid-cols-2">
-                    <Deferred data="payables" fallback={<SapSkeleton title="Cuentas por Pagar" icon={Wallet} />}>
-                        <SapPlaceholder title="Cuentas por Pagar" icon={Wallet} />
-                    </Deferred>
-                    <Deferred data="receivables" fallback={<SapSkeleton title="Cuentas por Cobrar" icon={ReceiptText} />}>
-                        <SapPlaceholder title="Cuentas por Cobrar" icon={ReceiptText} />
-                    </Deferred>
-                </div>
+                {/* AP — live from SAP */}
+                <Deferred data="payables" fallback={<SapSkeleton title="Cuentas por Pagar" icon={Wallet} />}>
+                    <AgingContent kind="payables" />
+                </Deferred>
+
+                {/* AR — live from SAP */}
+                <Deferred data="receivables" fallback={<SapSkeleton title="Cuentas por Cobrar" icon={ReceiptText} />}>
+                    <AgingContent kind="receivables" />
+                </Deferred>
             </div>
         </AppLayout>
     );
@@ -394,6 +435,98 @@ function CashContent() {
                         </TableBody>
                     </Table>
                 </div>
+            </PageSection>
+        </div>
+    );
+}
+
+function AgingContent({ kind }: { kind: 'payables' | 'receivables' }) {
+    const props = usePage<Props>().props;
+    const data = kind === 'payables' ? props.payables : props.receivables;
+    const title = kind === 'payables' ? 'Cuentas por Pagar' : 'Cuentas por Cobrar';
+    const icon = kind === 'payables' ? Wallet : ReceiptText;
+    const counterpartyLabel = kind === 'payables' ? 'Proveedores' : 'Clientes';
+
+    if (!data) return null;
+    if (data.available === false) {
+        return <SapPlaceholder title={title} icon={icon} />;
+    }
+
+    const c = data.consolidated;
+    const overdueRate = c.open_total > 0 ? Math.round((c.overdue_total / c.open_total) * 100) : 0;
+    const bucketKeys: AgingBucketKey[] = ['not_due', '0_30', '31_60', '61_90', '90_plus'];
+
+    return (
+        <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-4">
+                <StatCard icon={icon} label="Saldo abierto" value={formatMXN(c.open_total)} tone="primary" />
+                <StatCard icon={AlertTriangle} label="Vencido" value={formatMXN(c.overdue_total)} tone="danger" />
+                <StatCard icon={Clock} label="% vencido" value={`${overdueRate}%`} tone={overdueRate > 50 ? 'danger' : 'default'} />
+                <StatCard icon={ReceiptText} label="Facturas abiertas" value={c.doc_count.toLocaleString('es-MX')} />
+            </div>
+
+            <PageSection
+                icon={icon}
+                title={`${title} — aging`}
+                description={`Facturas abiertas al ${data.as_of} · ${data.currency} · ${data.by_company.length} empresas`}
+            >
+                <div className="grid gap-3 md:grid-cols-5">
+                    {bucketKeys.map((k) => (
+                        <div key={k} className="rounded-md border bg-card p-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                {BUCKET_LABELS[k]}
+                            </p>
+                            <p className={`mt-1 text-sm tabular-nums ${BUCKET_TONE[k]}`}>
+                                {formatMXN(c.buckets[k])}
+                            </p>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="mt-4 overflow-hidden rounded-md border">
+                    <Table className="[&_td]:px-4 [&_th]:px-4">
+                        <TableHeader className="bg-muted/50">
+                            <TableRow className="hover:bg-muted/50">
+                                <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Empresa (SAP)</TableHead>
+                                <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{counterpartyLabel}</TableHead>
+                                {bucketKeys.map((k) => (
+                                    <TableHead key={k} className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                        {BUCKET_LABELS[k]}
+                                    </TableHead>
+                                ))}
+                                <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {data.by_company.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={bucketKeys.length + 3} className="py-8 text-center text-sm text-muted-foreground">
+                                        Sin facturas abiertas
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
+                                data.by_company.map((row) => (
+                                    <TableRow key={row.company_db}>
+                                        <TableCell className="py-3 font-mono text-xs">{row.company_db}</TableCell>
+                                        <TableCell className="py-3 text-right text-xs tabular-nums">{row.doc_count.toLocaleString('es-MX')}</TableCell>
+                                        {bucketKeys.map((k) => (
+                                            <TableCell key={k} className={`py-3 text-right text-xs tabular-nums ${BUCKET_TONE[k]}`}>
+                                                {formatMXN(row.buckets[k])}
+                                            </TableCell>
+                                        ))}
+                                        <TableCell className="py-3 text-right text-sm font-semibold tabular-nums">{formatMXN(row.open_total)}</TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+
+                {data.failed_branches.length > 0 && (
+                    <p className="mt-3 text-xs text-muted-foreground">
+                        {data.failed_branches.length} empresa(s) sin respuesta de SAP.
+                    </p>
+                )}
             </PageSection>
         </div>
     );

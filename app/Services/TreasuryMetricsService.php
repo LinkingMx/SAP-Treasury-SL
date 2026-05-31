@@ -220,23 +220,128 @@ class TreasuryMetricsService
     }
 
     /**
+     * Aging of open A/P invoices (OPCH) bucketed against today's date.
+     *
      * @param  Collection<int, Branch>  $branches
      * @return array<string, mixed>
      */
-    public function payablesAging(Collection $branches, string $asOf): array
+    public function payablesAging(Collection $branches): array
     {
-        // TODO(prod): OPCH open A/P invoices bucketed by DocDueDate + DPO.
-        return $this->unavailable();
+        return $this->openInvoiceAging($branches, 'OPCH', 'payables');
     }
 
     /**
+     * Aging of open A/R invoices (OINV) bucketed against today's date.
+     *
      * @param  Collection<int, Branch>  $branches
      * @return array<string, mixed>
      */
-    public function receivablesAging(Collection $branches, string $asOf): array
+    public function receivablesAging(Collection $branches): array
     {
-        // TODO(prod): OINV open A/R invoices bucketed by DocDueDate + DSO.
-        return $this->unavailable();
+        return $this->openInvoiceAging($branches, 'OINV', 'receivables');
+    }
+
+    /**
+     * Shared aging engine for OPCH (A/P) and OINV (A/R). Buckets open balance
+     * (DocTotal − PaidToDate) by days past DocDueDate vs today.
+     *
+     * @param  Collection<int, Branch>  $branches
+     * @return array<string, mixed>
+     */
+    private function openInvoiceAging(Collection $branches, string $table, string $kind): array
+    {
+        $companies = $branches
+            ->filter(fn ($b) => filled($b->sap_database))
+            ->groupBy('sap_database');
+
+        $today = now()->toDateString();
+        $buckets = [
+            'not_due' => 0.0,
+            '0_30' => 0.0,
+            '31_60' => 0.0,
+            '61_90' => 0.0,
+            '90_plus' => 0.0,
+        ];
+        $byCompany = [];
+        $failed = [];
+        $totalOpen = 0.0;
+        $totalInvoices = 0;
+
+        foreach ($companies as $companyDb => $companyBranches) {
+            try {
+                config(['database.connections.sap_sqlsrv.database' => $companyDb]);
+                DB::purge('sap_sqlsrv');
+
+                // `$today` is a server-formatted ISO date — safe to inline. Wrapped
+                // in a subquery so SELECT/GROUP BY reference the same expression.
+                $sql = <<<SQL
+                    SELECT bucket, SUM(open_amount) AS open_amount, SUM(doc_count) AS doc_count
+                    FROM (
+                        SELECT
+                            CASE
+                                WHEN DocDueDate >= CAST('{$today}' AS DATE) THEN 'not_due'
+                                WHEN DATEDIFF(day, DocDueDate, CAST('{$today}' AS DATE)) BETWEEN 0 AND 30 THEN '0_30'
+                                WHEN DATEDIFF(day, DocDueDate, CAST('{$today}' AS DATE)) BETWEEN 31 AND 60 THEN '31_60'
+                                WHEN DATEDIFF(day, DocDueDate, CAST('{$today}' AS DATE)) BETWEEN 61 AND 90 THEN '61_90'
+                                ELSE '90_plus'
+                            END AS bucket,
+                            (DocTotal - ISNULL(PaidToDate, 0)) AS open_amount,
+                            1 AS doc_count
+                        FROM {$table}
+                        WHERE DocStatus = 'O' AND CANCELED = 'N'
+                    ) t
+                    GROUP BY bucket
+                    SQL;
+
+                $rows = collect(DB::connection('sap_sqlsrv')->select($sql));
+
+                $companyBuckets = array_fill_keys(array_keys($buckets), 0.0);
+                $companyOpen = 0.0;
+                $companyCount = 0;
+                foreach ($rows as $r) {
+                    $amount = (float) $r->open_amount;
+                    $companyBuckets[$r->bucket] = round($amount, 2);
+                    $buckets[$r->bucket] += $amount;
+                    $companyOpen += $amount;
+                    $companyCount += (int) $r->doc_count;
+                }
+
+                $byCompany[] = [
+                    'company_db' => $companyDb,
+                    'branches' => $companyBranches->pluck('name')->values()->all(),
+                    'buckets' => $companyBuckets,
+                    'open_total' => round($companyOpen, 2),
+                    'doc_count' => $companyCount,
+                ];
+                $totalOpen += $companyOpen;
+                $totalInvoices += $companyCount;
+            } catch (\Throwable $e) {
+                $failed[] = [
+                    'company_db' => $companyDb,
+                    'branches' => $companyBranches->pluck('name')->values()->all(),
+                    'reason' => $e->getMessage(),
+                ];
+            }
+        }
+
+        usort($byCompany, fn ($a, $b) => $b['open_total'] <=> $a['open_total']);
+
+        $overdue = $buckets['0_30'] + $buckets['31_60'] + $buckets['61_90'] + $buckets['90_plus'];
+
+        return [
+            'available' => true,
+            'kind' => $kind,
+            'currency' => 'MXN',
+            'as_of' => $today,
+            'consolidated' => [
+                'open_total' => round($totalOpen, 2),
+                'overdue_total' => round($overdue, 2),
+                'doc_count' => $totalInvoices,
+                'buckets' => array_map(fn ($v) => round($v, 2), $buckets),
+            ],
+            'by_company' => $byCompany,
+            'failed_branches' => $failed,
+        ];
     }
 
     /**

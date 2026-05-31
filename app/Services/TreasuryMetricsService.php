@@ -8,6 +8,7 @@ use App\Models\CustomerPaymentBatch;
 use App\Models\Transaction;
 use App\Models\VendorPaymentBatch;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Computes treasury KPIs for the manager dashboard.
@@ -152,12 +153,70 @@ class TreasuryMetricsService
      * @param  Collection<int, Branch>  $branches
      * @return array<string, mixed>
      */
-    public function cashPosition(Collection $branches, string $asOf): array
+    public function cashPosition(Collection $branches): array
     {
-        // TODO(prod): implement against SAP B1 — sum JDT1 (Debit - Credit) for
-        // GL accounts flagged as bank/cash, per branch->sap_database. Wire and
-        // validate against the real SAP SQL Server (ubuntu-srv).
-        return $this->unavailable();
+        // The GL (OACT) lives at SAP company-database level, and several app
+        // branches may map to the same company DB — so query each unique
+        // sap_database once to avoid double counting.
+        $companies = $branches
+            ->filter(fn ($b) => filled($b->sap_database))
+            ->groupBy('sap_database');
+
+        $byCompany = [];
+        $failed = [];
+        $cajaTotal = 0.0;
+        $bancoTotal = 0.0;
+
+        foreach ($companies as $companyDb => $companyBranches) {
+            try {
+                config(['database.connections.sap_sqlsrv.database' => $companyDb]);
+                DB::purge('sap_sqlsrv');
+
+                $rows = DB::connection('sap_sqlsrv')
+                    ->table('OACT')
+                    ->where('Postable', 'Y')
+                    ->where(function ($q) {
+                        $q->where('AcctCode', 'like', '1010-%')
+                            ->orWhere('AcctCode', 'like', '1020-%');
+                    })
+                    ->selectRaw("CASE WHEN AcctCode LIKE '1010-%' THEN 'caja' ELSE 'banco' END as kind, SUM(CurrTotal) as total")
+                    ->groupBy(DB::raw("CASE WHEN AcctCode LIKE '1010-%' THEN 'caja' ELSE 'banco' END"))
+                    ->pluck('total', 'kind');
+
+                $caja = (float) ($rows['caja'] ?? 0);
+                $banco = (float) ($rows['banco'] ?? 0);
+
+                $byCompany[] = [
+                    'company_db' => $companyDb,
+                    'branches' => $companyBranches->pluck('name')->values()->all(),
+                    'caja' => round($caja, 2),
+                    'banco' => round($banco, 2),
+                    'total' => round($caja + $banco, 2),
+                ];
+                $cajaTotal += $caja;
+                $bancoTotal += $banco;
+            } catch (\Throwable $e) {
+                $failed[] = [
+                    'company_db' => $companyDb,
+                    'branches' => $companyBranches->pluck('name')->values()->all(),
+                    'reason' => $e->getMessage(),
+                ];
+            }
+        }
+
+        usort($byCompany, fn ($a, $b) => $b['total'] <=> $a['total']);
+
+        return [
+            'available' => true,
+            'currency' => 'MXN',
+            'consolidated' => [
+                'caja' => round($cajaTotal, 2),
+                'banco' => round($bancoTotal, 2),
+                'total' => round($cajaTotal + $bancoTotal, 2),
+            ],
+            'by_company' => $byCompany,
+            'failed_branches' => $failed,
+        ];
     }
 
     /**

@@ -26,6 +26,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Deferred, Head, router, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
+    Banknote,
     CheckCircle2,
     Clock,
     Filter,
@@ -72,13 +73,37 @@ interface UnavailableData {
     reason: string;
 }
 
+interface CashCompany {
+    company_db: string;
+    branches: string[];
+    caja: number;
+    banco: number;
+    total: number;
+}
+
+interface CashData {
+    available: true;
+    currency: string;
+    consolidated: { caja: number; banco: number; total: number };
+    by_company: CashCompany[];
+    failed_branches: { company_db: string; branches: string[]; reason: string }[];
+}
+
 interface Props {
     branches: BranchOption[];
     filters: { branch_id: string; date_from: string; date_to: string };
     reconciliation?: ReconciliationData;
-    cash?: UnavailableData | Record<string, unknown>;
+    cash?: CashData | UnavailableData;
     payables?: UnavailableData | Record<string, unknown>;
     receivables?: UnavailableData | Record<string, unknown>;
+}
+
+function formatMXN(value: number): string {
+    return new Intl.NumberFormat('es-MX', {
+        style: 'currency',
+        currency: 'MXN',
+        minimumFractionDigits: 2,
+    }).format(value);
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -192,18 +217,20 @@ export default function Dashboard({ branches, filters }: Props) {
                     <ReconciliationContent />
                 </Deferred>
 
-                {/* SAP-backed groups */}
+                {/* Cash position — live from SAP */}
+                <Deferred data="cash" fallback={<SapSkeleton title="Posición de Efectivo" icon={Landmark} />}>
+                    <CashContent />
+                </Deferred>
+
+                {/* AP / AR — SAP-backed, next phases */}
                 <div className="grid gap-4 lg:grid-cols-2">
-                    <Deferred data="cash" fallback={<SapSkeleton title="Posición de Efectivo" icon={Landmark} />}>
-                        <SapPlaceholder title="Posición de Efectivo" icon={Landmark} />
-                    </Deferred>
                     <Deferred data="payables" fallback={<SapSkeleton title="Cuentas por Pagar" icon={Wallet} />}>
                         <SapPlaceholder title="Cuentas por Pagar" icon={Wallet} />
                     </Deferred>
+                    <Deferred data="receivables" fallback={<SapSkeleton title="Cuentas por Cobrar" icon={ReceiptText} />}>
+                        <SapPlaceholder title="Cuentas por Cobrar" icon={ReceiptText} />
+                    </Deferred>
                 </div>
-                <Deferred data="receivables" fallback={<SapSkeleton title="Cuentas por Cobrar" icon={ReceiptText} />}>
-                    <SapPlaceholder title="Cuentas por Cobrar" icon={ReceiptText} />
-                </Deferred>
             </div>
         </AppLayout>
     );
@@ -314,6 +341,60 @@ function ReconciliationContent() {
                     </div>
                 </PageSection>
             </div>
+        </div>
+    );
+}
+
+function CashContent() {
+    const { cash } = usePage<Props>().props;
+    if (!cash) return null;
+    if (cash.available === false) {
+        return <SapPlaceholder title="Posición de Efectivo" icon={Landmark} />;
+    }
+
+    const c = cash.consolidated;
+    return (
+        <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-3">
+                <StatCard icon={Banknote} label="Caja / efectivo" value={formatMXN(c.caja)} tone="default" />
+                <StatCard icon={Landmark} label="Bancos" value={formatMXN(c.banco)} tone={c.banco < 0 ? 'danger' : 'success'} />
+                <StatCard icon={Wallet} label="Posición total" value={formatMXN(c.total)} tone={c.total < 0 ? 'danger' : 'primary'} />
+            </div>
+
+            <PageSection
+                icon={Landmark}
+                title="Posición por empresa"
+                description={`Saldo GL (cuentas 1010 caja / 1020 banco) · ${cash.currency} · ${cash.by_company.length} empresas`}
+            >
+                <div className="overflow-hidden rounded-md border">
+                    <Table className="[&_td]:px-4 [&_th]:px-4">
+                        <TableHeader className="bg-muted/50">
+                            <TableRow className="hover:bg-muted/50">
+                                <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Empresa (SAP)</TableHead>
+                                <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sucursales</TableHead>
+                                <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Caja</TableHead>
+                                <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bancos</TableHead>
+                                <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {cash.by_company.map((row) => (
+                                <TableRow key={row.company_db}>
+                                    <TableCell className="py-3 font-mono text-xs">{row.company_db}</TableCell>
+                                    <TableCell className="max-w-[260px] py-3 text-xs text-muted-foreground">
+                                        <span className="line-clamp-2">{row.branches.join(', ')}</span>
+                                    </TableCell>
+                                    <TableCell className="py-3 text-right text-xs tabular-nums">{formatMXN(row.caja)}</TableCell>
+                                    <TableCell className={`py-3 text-right text-xs tabular-nums ${row.banco < 0 ? 'text-rose-600 dark:text-rose-400' : ''}`}>
+                                        {formatMXN(row.banco)}
+                                    </TableCell>
+                                    <TableCell className="py-3 text-right text-sm font-semibold tabular-nums">{formatMXN(row.total)}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+            </PageSection>
         </div>
     );
 }

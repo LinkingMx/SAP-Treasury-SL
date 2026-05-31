@@ -44,7 +44,7 @@ class DashboardController extends Controller
                 'reconciliation',
             ),
             // SAP-backed groups load in parallel; gracefully unavailable off-prod.
-            'cash' => Inertia::defer(fn () => $metrics->cashPosition($branches, $asOf), 'cash'),
+            'cash' => Inertia::defer(fn () => $metrics->cashPosition($branches), 'cash'),
             'payables' => Inertia::defer(fn () => $metrics->payablesAging($branches, $asOf), 'sap'),
             'receivables' => Inertia::defer(fn () => $metrics->receivablesAging($branches, $asOf), 'sap'),
         ]);

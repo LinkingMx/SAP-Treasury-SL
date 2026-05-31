@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Filament\Enums\ThemeMode;
+use Filament\FontProviders\GoogleFontProvider;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -11,6 +12,11 @@ use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Navigation\NavigationGroup;
 use Filament\Panel;
 use Filament\PanelProvider;
+use Filament\Support\Assets\Css;
+use Filament\Support\Colors\Color;
+use Filament\Support\Enums\Width;
+use Filament\Support\Facades\FilamentAsset;
+use Filament\Support\Icons\Heroicon;
 use Filament\Widgets\AccountWidget;
 use Filament\Widgets\FilamentInfoWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
@@ -22,6 +28,14 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
 {
+    public function boot(): void
+    {
+        FilamentAsset::register([
+            Css::make('admin-custom', __DIR__.'/../../../public/css/filament/admin/custom.css')
+                ->relativePublicPath('css/filament/admin/custom.css'),
+        ]);
+    }
+
     public function panel(Panel $panel): Panel
     {
         return $panel
@@ -34,59 +48,30 @@ class AdminPanelProvider extends PanelProvider
             ->darkModeBrandLogo(asset('images/logo_dark.svg'))
             ->brandLogoHeight('2rem')
             ->favicon(asset('images/favicon.svg'))
-            ->font('Open Sans')
+            ->font('Geist', provider: GoogleFontProvider::class)
             ->defaultThemeMode(ThemeMode::Dark)
             ->colors([
-                // Costeño Brand - Primary: Cream (#EBDFC7)
-                'primary' => [
-                    50 => '#FDFCFA',
-                    100 => '#FAF7F2',
-                    200 => '#F5EFE6',
-                    300 => '#EBDFC7', // CREAM_OFFICIAL
-                    400 => '#E0D4B8',
-                    500 => '#D4C9A9',
-                    600 => '#B8A88E',
-                    700 => '#968568',
-                    800 => '#746550',
-                    900 => '#584C3D',
-                    950 => '#3D352A',
-                ],
-                // Gray scale → Navy tones (Navy Official: #191731)
-                'gray' => [
-                    50 => '#FDFCFA',   // Light backgrounds (cream tint)
-                    100 => '#F5EFE6',
-                    200 => '#E0D4B8',
-                    300 => '#A8A8C0',
-                    400 => '#6B6B90',
-                    500 => '#3D3870',
-                    600 => '#2A2650',
-                    700 => '#1E1B3D',
-                    800 => '#191731', // NAVY_OFFICIAL
-                    900 => '#121025',
-                    950 => '#0D0F1A', // NAVY_DARKER
-                ],
-                // Warning/Accent: Gold (#C5A059)
-                'warning' => [
-                    50 => '#FDF9F0',
-                    100 => '#FAF0DC',
-                    200 => '#F5E0B8',
-                    300 => '#EDCB8A',
-                    400 => '#D4AD6A',
-                    500 => '#C5A059', // GOLD_ACCENT
-                    600 => '#A88545',
-                    700 => '#8A6A36',
-                    800 => '#6B512A',
-                    900 => '#4D3A1F',
-                    950 => '#2F2313',
-                ],
+                'primary' => Color::Slate,
+                'gray' => Color::Slate,
             ])
+            ->maxContentWidth(Width::Full)
+            ->sidebarCollapsibleOnDesktop()
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->navigationGroups([
                 NavigationGroup::make('Tesorería')
+                    ->icon(Heroicon::OutlinedBanknotes)
+                    ->collapsible(),
+                NavigationGroup::make('SAP')
+                    ->icon(Heroicon::OutlinedServerStack)
+                    ->collapsible(),
+                NavigationGroup::make('IA')
+                    ->icon(Heroicon::OutlinedSparkles)
                     ->collapsible(),
                 NavigationGroup::make('Administración')
-                    ->collapsible(),
+                    ->icon(Heroicon::OutlinedWrenchScrewdriver)
+                    ->collapsible()
+                    ->collapsed(),
             ])
             ->pages([])
             ->homeUrl('/admin/branches')
@@ -106,6 +91,8 @@ class AdminPanelProvider extends PanelProvider
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
             ])
+            ->resourceCreatePageRedirect('index')
+            ->resourceEditPageRedirect('index')
             ->plugins([
                 FilamentShieldPlugin::make()
                     ->navigationGroup('Administración'),

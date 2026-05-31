@@ -3,171 +3,59 @@
 @source '../../../../app/Filament/**/*';
 @source '../../../../resources/views/filament/**/*';
 
-/*
-|--------------------------------------------------------------------------
-| Costeño Brand Design System - Filament Admin Theme
-|--------------------------------------------------------------------------
-|
-| Brand Colors (Official):
-| - Navy: #191731 (primary dark)
-| - Cream: #EBDFC7 (primary light)
-| - Gold: #C5A059 (accent)
-|
-| Typography: Open Sans
-|
-*/
+/**
+ * SAP Treasury SL — tema Filament alineado al front (tweakcn slate).
+ * Color (Slate) y fuente (Geist) se configuran en AdminPanelProvider.
+ * Aquí solo el radius del front (0.625rem) y utilidades.
+ */
 
-/* Custom Theme Variables */
 @theme {
-    /* Costeño Official Brand Colors */
-    --color-navy-base: #191731;
-    --color-navy-darker: #0D0F1A;
-    --color-cream-primary: #EBDFC7;
-    --color-gold-accent: #C5A059;
+    --radius-sm: calc(0.625rem - 4px);
+    --radius-md: calc(0.625rem - 2px);
+    --radius-lg: 0.625rem;
+    --radius-xl: calc(0.625rem + 4px);
 }
 
-/* Primary Button Enhancements */
-.fi-btn-primary {
-    transition: all 0.3s ease;
+/* Tarjetas de igual alto (usada en páginas de Settings). */
+.equal-height-cards .fi-sc-section,
+.equal-height-cards .fi-section {
+    height: 100%;
 }
 
-.fi-btn-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(235, 223, 199, 0.3);
+/**
+ * Modo oscuro alineado al front (tweakcn slate). Filament dark usa los shades
+ * más oscuros del ramp (gray-950/900 ≈ casi negro); subimos las superficies a
+ * los tokens slate medios del front. Jerarquía: body < sidebar < card < elevado.
+ */
+.dark {
+    --fi-bg: oklch(0.2292 0.0304 259.0329);
+    --fi-sidebar: oklch(0.2452 0.0305 256.8649);
+    --fi-card: oklch(0.2610 0.0307 254.7604);
+    --fi-elevated: oklch(0.2897 0.0338 255.7937);
+    --fi-input: oklch(0.3205 0.0336 253.9373);
 }
 
-/* Sidebar Branding */
-.fi-sidebar {
-    border-right-color: rgba(235, 223, 199, 0.1);
+.dark .fi-body {
+    background-color: var(--fi-bg);
 }
 
-/* Navigation Items - Elegant Hover */
-.fi-sidebar-item-button:hover {
-    background-color: rgba(235, 223, 199, 0.08);
+.dark .fi-sidebar,
+.dark .fi-topbar {
+    background-color: var(--fi-sidebar);
 }
 
-/* Active Navigation State */
-.fi-sidebar-item-active .fi-sidebar-item-button {
-    background-color: rgba(235, 223, 199, 0.12);
-    border-left: 2px solid var(--color-cream-primary);
+.dark .fi-section,
+.dark .fi-ta-ctn,
+.dark .fi-simple-main {
+    background-color: var(--fi-card);
 }
 
-/* Cards - Luxury Surface Treatment */
-.fi-section,
-.fi-card {
-    border-color: rgba(235, 223, 199, 0.1);
+.dark .fi-modal-window,
+.dark .fi-dropdown-panel {
+    background-color: var(--fi-elevated);
 }
 
-/* Dark Mode Card Enhancement */
-:is(.dark) .fi-section,
-:is(.dark) .fi-card {
-    background-color: rgba(25, 23, 49, 0.6);
-    backdrop-filter: blur(8px);
-}
-
-/* Table Header - Refined Style */
-.fi-ta-header-cell {
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-size: 0.75rem;
-    font-weight: 600;
-}
-
-/* Input Fields - Elegant Focus */
-.fi-input:focus,
-.fi-select:focus {
-    border-color: var(--color-cream-primary);
-    box-shadow: 0 0 0 2px rgba(235, 223, 199, 0.2);
-}
-
-/* Modal Overlay - Premium Feel */
-.fi-modal-window {
-    backdrop-filter: blur(4px);
-}
-
-/* Badge Refinements */
-.fi-badge {
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-size: 0.65rem;
-}
-
-/* Dropdown Menu - Luxury */
-.fi-dropdown-panel {
-    border-color: rgba(235, 223, 199, 0.15);
-}
-
-:is(.dark) .fi-dropdown-panel {
-    background-color: var(--color-navy-darker);
-}
-
-/* Login Page Branding */
-.fi-simple-layout {
-    background: linear-gradient(135deg, var(--color-navy-darker) 0%, var(--color-navy-base) 100%);
-}
-
-/* Footer Links */
-.fi-simple-footer a {
-    color: var(--color-cream-primary);
-    opacity: 0.7;
-    transition: opacity 0.2s;
-}
-
-.fi-simple-footer a:hover {
-    opacity: 1;
-}
-
-/* Scrollbar Styling (Webkit) */
-::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-
-::-webkit-scrollbar-track {
-    background: var(--color-navy-darker);
-}
-
-::-webkit-scrollbar-thumb {
-    background: rgba(235, 223, 199, 0.2);
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: rgba(235, 223, 199, 0.3);
-}
-
-/* Gold Accent for Special Elements */
-.fi-badge-warning,
-.fi-color-warning {
-    --c-400: var(--color-gold-accent);
-    --c-500: var(--color-gold-accent);
-}
-
-/* Notification Toasts */
-.fi-notification {
-    border-left: 3px solid var(--color-cream-primary);
-}
-
-/* Stats Widget Enhancement */
-.fi-wi-stats-overview-stat {
-    border-color: rgba(235, 223, 199, 0.1);
-}
-
-/* Form Section Headers */
-.fi-section-header {
-    border-bottom-color: rgba(235, 223, 199, 0.1);
-}
-
-/* Empty State Styling */
-.fi-ta-empty-state {
-    color: rgba(235, 223, 199, 0.5);
-}
-
-/* Pagination Styling */
-.fi-pagination-item-button {
-    border-color: rgba(235, 223, 199, 0.2);
-}
-
-.fi-pagination-item-button:hover {
-    background-color: rgba(235, 223, 199, 0.1);
+.dark .fi-input,
+.dark .fi-input-wrapper {
+    background-color: var(--fi-input);
 }

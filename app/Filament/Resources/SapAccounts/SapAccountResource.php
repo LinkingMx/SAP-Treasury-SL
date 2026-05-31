@@ -7,6 +7,7 @@ use App\Filament\Resources\SapAccounts\Tables\SapAccountsTable;
 use App\Models\SapAccount;
 use BackedEnum;
 use Filament\Resources\Resource;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use UnitEnum;
 
@@ -14,7 +15,7 @@ class SapAccountResource extends Resource
 {
     protected static ?string $model = SapAccount::class;
 
-    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-clipboard-document-list';
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentList;
 
     protected static ?string $modelLabel = 'Cuenta SAP';
 

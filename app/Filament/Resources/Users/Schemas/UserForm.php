@@ -8,6 +8,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 
@@ -20,30 +21,30 @@ class UserForm
                 Grid::make(2)
                     ->columnSpanFull()
                     ->schema([
-                        // Left column: User information
                         Section::make('Información del Usuario')
-                            ->description('Datos personales y credenciales de acceso')
+                            ->description('Datos personales y credenciales de acceso.')
+                            ->icon(Heroicon::OutlinedUser)
                             ->schema([
                                 TextInput::make('name')
                                     ->label('Nombre')
-                                    ->prefixIcon('heroicon-o-user')
+                                    ->prefixIcon(Heroicon::OutlinedUser)
                                     ->placeholder('Juan Pérez')
                                     ->required()
                                     ->maxLength(255),
 
                                 TextInput::make('email')
                                     ->label('Email')
-                                    ->prefixIcon('heroicon-o-envelope')
+                                    ->prefixIcon(Heroicon::OutlinedEnvelope)
                                     ->placeholder('usuario@ejemplo.com')
                                     ->email()
                                     ->required()
                                     ->unique(ignoreRecord: true)
                                     ->maxLength(255)
-                                    ->helperText('Este correo será utilizado para notificaciones y acceso al sistema'),
+                                    ->helperText('Este correo será utilizado para notificaciones y acceso al sistema.'),
 
                                 TextInput::make('password')
                                     ->label('Contraseña')
-                                    ->prefixIcon('heroicon-o-lock-closed')
+                                    ->prefixIcon(Heroicon::OutlinedLockClosed)
                                     ->placeholder('••••••••')
                                     ->password()
                                     ->revealable()
@@ -53,12 +54,12 @@ class UserForm
                                     ->rule(Password::defaults())
                                     ->confirmed()
                                     ->helperText(fn (string $operation): string => $operation === 'edit'
-                                        ? 'Dejar en blanco para mantener la contraseña actual'
-                                        : 'Mínimo 8 caracteres'),
+                                        ? 'Dejar en blanco para mantener la contraseña actual.'
+                                        : 'Mínimo 8 caracteres.'),
 
                                 TextInput::make('password_confirmation')
                                     ->label('Confirmar Contraseña')
-                                    ->prefixIcon('heroicon-o-lock-closed')
+                                    ->prefixIcon(Heroicon::OutlinedLockClosed)
                                     ->placeholder('••••••••')
                                     ->password()
                                     ->revealable()
@@ -67,30 +68,32 @@ class UserForm
                             ])
                             ->columns(1),
 
-                        // Right column: Roles and Branches
                         Grid::make(1)
                             ->schema([
                                 Section::make('Roles y Permisos')
-                                    ->description('Asigna los roles de acceso al usuario')
+                                    ->description('Asigna los roles de acceso al usuario.')
+                                    ->icon(Heroicon::OutlinedShieldCheck)
                                     ->schema([
                                         CheckboxList::make('roles')
                                             ->label('Roles')
                                             ->relationship('roles', 'name')
                                             ->columns(2)
-                                            ->helperText('Selecciona los roles que tendrá este usuario'),
+                                            ->helperText('Selecciona los roles que tendrá este usuario.'),
                                     ])
                                     ->columns(1),
 
                                 Section::make('Sucursales')
-                                    ->description('Asigna las sucursales a las que tendrá acceso el usuario')
+                                    ->description('Asigna las sucursales a las que tendrá acceso el usuario.')
+                                    ->icon(Heroicon::OutlinedBuildingOffice2)
                                     ->schema([
                                         Select::make('branches')
                                             ->label('Sucursales')
+                                            ->prefixIcon(Heroicon::OutlinedBuildingOffice2)
                                             ->relationship('branches', 'name')
                                             ->multiple()
                                             ->preload()
                                             ->searchable()
-                                            ->helperText('Selecciona una o más sucursales'),
+                                            ->helperText('Selecciona una o más sucursales.'),
                                     ])
                                     ->columns(1),
                             ]),

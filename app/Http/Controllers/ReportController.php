@@ -17,6 +17,29 @@ class ReportController extends Controller
     public function transactions(): Response
     {
         $branchIds = auth()->user()->branches()->pluck('branches.id');
+        $since = now()->subWeeks(13)->startOfDay();
+
+        $bankAccountIds = BankAccount::whereIn('branch_id', $branchIds)->pluck('id');
+
+        $txCounts = Transaction::query()
+            ->whereIn('bank_account_id', $bankAccountIds)
+            ->where('created_at', '>=', $since)
+            ->selectRaw('DATE(created_at) as day, COUNT(*) as count')
+            ->groupBy('day')
+            ->pluck('count', 'day');
+
+        $paymentCounts = VendorPaymentInvoice::query()
+            ->whereHas('batch', fn ($q) => $q->whereIn('branch_id', $branchIds))
+            ->where('created_at', '>=', $since)
+            ->selectRaw('DATE(created_at) as day, COUNT(*) as count')
+            ->groupBy('day')
+            ->pluck('count', 'day');
+
+        $activityData = collect()
+            ->merge($txCounts)
+            ->mergeRecursive($paymentCounts)
+            ->map(fn ($v) => is_array($v) ? array_sum($v) : $v)
+            ->all();
 
         return Inertia::render('reports/transactions', [
             'branches' => auth()->user()->branches()->get(['branches.id', 'branches.name']),
@@ -25,6 +48,7 @@ class ReportController extends Controller
             'users' => User::whereHas('branches', fn ($q) => $q->whereIn('branches.id', $branchIds))
                 ->orderBy('name')
                 ->get(['id', 'name']),
+            'activityData' => $activityData,
         ]);
     }
 

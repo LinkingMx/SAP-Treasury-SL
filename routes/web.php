@@ -85,20 +85,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('payments/sap', function () {
         $branchIds = auth()->user()->branches()->pluck('branches.id');
 
-        $since = now()->subWeeks(13)->startOfDay();
-        $activityData = \App\Models\VendorPaymentBatch::query()
-            ->whereIn('branch_id', $branchIds)
-            ->where('created_at', '>=', $since)
-            ->selectRaw('DATE(created_at) as day, COUNT(*) as count')
-            ->groupBy('day')
-            ->pluck('count', 'day')
-            ->all();
-
         return Inertia::render('payments/sap', [
             'branches' => auth()->user()->branches()->get(['branches.id', 'branches.name']),
             'bankAccounts' => BankAccount::whereIn('branch_id', $branchIds)
                 ->get(['id', 'branch_id', 'name', 'account']),
-            'activityData' => $activityData,
+            'activityData' => \App\Services\ActivityFeed::dailyCounts(
+                \App\Models\VendorPaymentBatch::query()->whereIn('branch_id', $branchIds),
+            ),
         ]);
     })->name('payments.sap');
 
@@ -117,14 +110,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('payments/customers', function () {
         $branchIds = auth()->user()->branches()->pluck('branches.id');
 
-        $since = now()->subWeeks(13)->startOfDay();
-        $activityData = \App\Models\CustomerPaymentBatch::query()
-            ->whereIn('branch_id', $branchIds)
-            ->where('created_at', '>=', $since)
-            ->selectRaw('DATE(created_at) as day, COUNT(*) as count')
-            ->groupBy('day')
-            ->pluck('count', 'day')
-            ->all();
+        $activityData = \App\Services\ActivityFeed::dailyCounts(
+            \App\Models\CustomerPaymentBatch::query()->whereIn('branch_id', $branchIds),
+        );
 
         return Inertia::render('payments/customers', [
             'branches' => auth()->user()->branches()->get(['branches.id', 'branches.name']),

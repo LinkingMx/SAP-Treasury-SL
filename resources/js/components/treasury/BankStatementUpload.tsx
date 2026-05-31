@@ -3,14 +3,20 @@ import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { FilterField, FiltersCard } from '@/components/page/filters-card';
+import { InfoWidget } from '@/components/page/info-widget';
+import { PageSection } from '@/components/page/page-section';
 import {
     Dialog,
     DialogContent,
     DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { InfoCell, StatCard } from '@/components/page/detail-bits';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -51,15 +57,19 @@ import {
     AlertCircle,
     AlertTriangle,
     ArrowDownCircle,
+    ArrowDownRight,
     ArrowUpCircle,
+    ArrowUpRight,
     Building2,
     Calendar,
     CheckCircle2,
     Circle,
     Eye,
     FileSpreadsheet,
+    Filter,
     Hash,
     Landmark,
+    ListChecks,
     Loader2,
     RefreshCw,
     Send,
@@ -68,6 +78,39 @@ import {
     Upload,
     X,
 } from 'lucide-react';
+
+const STEP_DETAILS: { id: string; title: string; description: string }[] = [
+    {
+        id: 'load',
+        title: 'Carga del archivo',
+        description:
+            'El archivo Excel o CSV se sube al servidor en formato binario. Se valida tamaño y extensión antes de procesar.',
+    },
+    {
+        id: 'structure',
+        title: 'Análisis de estructura con IA',
+        description:
+            'La IA detecta qué columnas contienen fecha, descripción, cargo y abono — sin importar el formato del banco.',
+    },
+    {
+        id: 'extract',
+        title: 'Extracción de transacciones',
+        description:
+            'Las filas se convierten a movimientos normalizados con fecha + monto + tipo (cargo/abono). Filas inválidas se reportan.',
+    },
+    {
+        id: 'review',
+        title: 'Revisión manual',
+        description:
+            'Antes de enviar a SAP, ves la lista clasificada y puedes ajustar o descartar movimientos detectados como duplicados.',
+    },
+    {
+        id: 'send',
+        title: 'Envío a SAP',
+        description:
+            'Se publica al endpoint BankStatements de SAP Business One vía Service Layer. Recibes el DocEntry como confirmación.',
+    },
+];
 
 type UploadStatus = 'idle' | 'analyzing' | 'classifying' | 'review' | 'sending' | 'complete' | 'error';
 
@@ -1036,189 +1079,210 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
     // Idle state - Form
     return (
         <div className="space-y-4">
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Send className="h-5 w-5" />
-                        Cargar Extracto Bancario a SAP
-                    </CardTitle>
-                    <CardDescription>
-                        Sube el archivo de estado de cuenta del banco para enviarlo al endpoint BankStatements de SAP.
-                        Solo se muestran cuentas bancarias con Clave SAP configurada.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    {/* Branch, Account and Date Selection */}
-                    <div className="grid md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                            <Label>Sucursal</Label>
-                            <Select value={selectedBranch} onValueChange={handleBranchChange}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Selecciona una sucursal" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {branches.map((branch) => (
-                                        <SelectItem key={branch.id} value={String(branch.id)}>
-                                            {branch.name}
+            {errorMessage && (
+                <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{errorMessage}</AlertDescription>
+                </Alert>
+            )}
+
+            {selectedBranch && filteredBankAccounts.length === 0 && (
+                <Alert>
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    <AlertDescription>
+                        No hay cuentas bancarias con <strong>Clave Bancaria SAP</strong> configurada para esta sucursal.
+                        Por favor, configura la Clave SAP en el panel de administración (Cuentas Bancarias).
+                    </AlertDescription>
+                </Alert>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <FiltersCard icon={Filter} columns={3} className="lg:col-span-2">
+                    <FilterField label="Sucursal" htmlFor="branch">
+                        <Select value={selectedBranch} onValueChange={handleBranchChange}>
+                            <SelectTrigger id="branch">
+                                <SelectValue placeholder="Selecciona una sucursal" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {branches.map((branch) => (
+                                    <SelectItem key={branch.id} value={String(branch.id)}>
+                                        {branch.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </FilterField>
+
+                    <FilterField label="Cuenta Bancaria (con Clave SAP)" htmlFor="bank-account">
+                        <Select
+                            value={selectedBankAccount}
+                            onValueChange={handleBankAccountChange}
+                            disabled={!selectedBranch}
+                        >
+                            <SelectTrigger id="bank-account">
+                                <SelectValue placeholder="Selecciona una cuenta" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {filteredBankAccounts.length === 0 ? (
+                                    <SelectItem value="_none" disabled>
+                                        No hay cuentas con Clave SAP
+                                    </SelectItem>
+                                ) : (
+                                    filteredBankAccounts.map((account) => (
+                                        <SelectItem key={account.id} value={String(account.id)}>
+                                            {account.name} (SAP: {account.sap_bank_key})
                                         </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                                    ))
+                                )}
+                            </SelectContent>
+                        </Select>
+                    </FilterField>
 
-                        <div className="space-y-2">
-                            <Label>Cuenta Bancaria (con Clave SAP)</Label>
-                            <Select
-                                value={selectedBankAccount}
-                                onValueChange={handleBankAccountChange}
-                                disabled={!selectedBranch}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Selecciona una cuenta" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {filteredBankAccounts.length === 0 ? (
-                                        <SelectItem value="_none" disabled>
-                                            No hay cuentas con Clave SAP
-                                        </SelectItem>
-                                    ) : (
-                                        filteredBankAccounts.map((account) => (
-                                            <SelectItem key={account.id} value={String(account.id)}>
-                                                {account.name} (SAP: {account.sap_bank_key})
-                                            </SelectItem>
-                                        ))
-                                    )}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                    <FilterField label="Fecha del Extracto" htmlFor="statement-date">
+                        <Input
+                            id="statement-date"
+                            type="date"
+                            value={statementDate}
+                            onChange={(e) => setStatementDate(e.target.value)}
+                        />
+                    </FilterField>
 
-                        <div className="space-y-2">
-                            <Label>Fecha del Extracto</Label>
-                            <Input
-                                type="date"
-                                value={statementDate}
-                                onChange={(e) => setStatementDate(e.target.value)}
-                            />
-                        </div>
-                    </div>
-
-                    {/* No accounts warning */}
-                    {selectedBranch && filteredBankAccounts.length === 0 && (
-                        <Alert>
-                            <AlertTriangle className="h-4 w-4 text-amber-500" />
-                            <AlertDescription>
-                                No hay cuentas bancarias con <strong>Clave Bancaria SAP</strong> configurada para esta sucursal.
-                                Por favor, configura la Clave SAP en el panel de administracion (Cuentas Bancarias).
-                            </AlertDescription>
-                        </Alert>
-                    )}
-
-                    {/* File Upload */}
-                    <div className="space-y-2">
-                        <Label>Archivo del Banco</Label>
-                        <div className="flex items-center gap-2">
-                            <Input
-                                ref={fileInputRef}
-                                type="file"
-                                accept=".xlsx,.xls,.csv"
-                                onChange={handleFileSelect}
-                                className="hidden"
-                                id="bank-statement-file-input"
-                            />
-                            <Button
-                                variant="outline"
-                                onClick={() => fileInputRef.current?.click()}
-                                className="flex-1"
-                                disabled={!selectedBankAccount}
-                            >
-                                <Upload className="mr-2 h-4 w-4" />
-                                {selectedFile ? selectedFile.name : 'Seleccionar archivo Excel o CSV'}
-                            </Button>
-                            {selectedFile && (
-                                <Button variant="ghost" size="icon" onClick={handleClearFile}>
-                                    <X className="h-4 w-4" />
-                                </Button>
-                            )}
-                        </div>
-                        <p className="text-sm text-muted-foreground">
+                    <div className="space-y-2 lg:col-span-3">
+                        <Label
+                            htmlFor="bank-statement-file-input"
+                            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                        >
+                            Archivo del Banco
+                        </Label>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".xlsx,.xls,.csv"
+                            onChange={handleFileSelect}
+                            className="sr-only"
+                            id="bank-statement-file-input"
+                            disabled={!selectedBankAccount}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={!selectedBankAccount}
+                            className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-dashed border-input bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <Upload className="h-4 w-4" />
+                            <span className="truncate">
+                                {selectedFile
+                                    ? `${selectedFile.name} · ${(selectedFile.size / 1024).toFixed(1)} KB`
+                                    : 'Seleccionar archivo Excel o CSV'}
+                            </span>
+                            {selectedFile ? (
+                                <span
+                                    role="button"
+                                    aria-label="Remover archivo"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleClearFile();
+                                    }}
+                                    className="ml-2 inline-flex items-center text-muted-foreground hover:text-foreground"
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </span>
+                            ) : null}
+                        </button>
+                        <p className="text-xs text-muted-foreground">
                             Formatos soportados: Excel (.xlsx, .xls) y CSV.
                         </p>
+                        <div className="flex justify-end pt-1">
+                            <Button onClick={startProcess} disabled={!canStartProcess}>
+                                <Sparkles className="h-4 w-4" />
+                                Analizar y Preparar Envío
+                            </Button>
+                        </div>
                     </div>
+                </FiltersCard>
 
-                    {/* Error message */}
-                    {errorMessage && (
-                        <Alert variant="destructive">
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertDescription>{errorMessage}</AlertDescription>
-                        </Alert>
-                    )}
+                <InfoWidget
+                    title="Qué pasará al enviar"
+                    icon={ListChecks}
+                    footer="El proceso toma entre 10 y 60 segundos."
+                >
+                    <Accordion type="single" collapsible className="w-full">
+                        {STEP_DETAILS.map((step, i) => (
+                            <AccordionItem key={step.id} value={step.id}>
+                                <AccordionTrigger className="py-2.5 hover:no-underline">
+                                    <div className="flex items-center gap-2.5">
+                                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold tabular-nums text-muted-foreground">
+                                            {i + 1}
+                                        </span>
+                                        <span className="text-sm font-medium">{step.title}</span>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="pl-7 text-xs text-muted-foreground">
+                                    {step.description}
+                                </AccordionContent>
+                            </AccordionItem>
+                        ))}
+                    </Accordion>
+                </InfoWidget>
+            </div>
 
-                    {/* Process Button */}
-                    <Button
-                        onClick={startProcess}
-                        disabled={!canStartProcess}
-                        className="w-full"
-                        size="lg"
-                    >
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        Analizar y Preparar Envio
-                    </Button>
-                </CardContent>
-            </Card>
-
-            {/* History Section */}
             {selectedBranch && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-base">Historial de Extractos Enviados</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {historyLoading ? (
-                            <div className="flex items-center justify-center py-8">
-                                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                            </div>
-                        ) : history.length === 0 ? (
-                            <p className="text-center text-muted-foreground py-8">
-                                No hay extractos enviados para esta sucursal
-                            </p>
-                        ) : (
-                            <div className="max-h-[250px] overflow-y-auto">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Numero</TableHead>
-                                            <TableHead>Fecha</TableHead>
-                                            <TableHead>Archivo</TableHead>
-                                            <TableHead>Filas</TableHead>
-                                            <TableHead>Estado</TableHead>
-                                            <TableHead>DocEntry</TableHead>
-                                            <TableHead>Usuario</TableHead>
-                                            <TableHead className="w-20">Acciones</TableHead>
+                <PageSection
+                    icon={FileSpreadsheet}
+                    title="Historial de Extractos Enviados"
+                    description="Últimos extractos enviados al endpoint BankStatements de SAP."
+                >
+                    {historyLoading ? (
+                        <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : history.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-8">
+                            No hay extractos enviados para esta sucursal
+                        </p>
+                    ) : (
+                        <div className="overflow-hidden rounded-md border">
+                            <div className="max-h-[320px] overflow-y-auto">
+                                <Table className="[&_td]:px-4 [&_th]:px-4">
+                                    <TableHeader className="bg-muted/50">
+                                        <TableRow className="hover:bg-muted/50">
+                                            <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Número</TableHead>
+                                            <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fecha</TableHead>
+                                            <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Archivo</TableHead>
+                                            <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filas</TableHead>
+                                            <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Estado</TableHead>
+                                            <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-muted-foreground">DocEntry</TableHead>
+                                            <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Usuario</TableHead>
+                                            <TableHead className="h-11 w-24 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Acciones</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {history.map((item) => (
                                             <TableRow key={item.id}>
-                                                <TableCell className="font-mono text-xs">
+                                                <TableCell className="py-3 font-mono text-xs tabular-nums">
                                                     {item.statement_number}
                                                 </TableCell>
-                                                <TableCell>{item.statement_date}</TableCell>
-                                                <TableCell className="max-w-[150px] truncate" title={item.original_filename}>
+                                                <TableCell className="py-3 whitespace-nowrap text-xs tabular-nums">
+                                                    {item.statement_date}
+                                                </TableCell>
+                                                <TableCell className="max-w-[180px] truncate py-3 text-xs" title={item.original_filename}>
                                                     {item.original_filename}
                                                 </TableCell>
-                                                <TableCell>{item.rows_count}</TableCell>
-                                                <TableCell>{getStatusBadge(item.status)}</TableCell>
-                                                <TableCell>
+                                                <TableCell className="py-3 text-right tabular-nums">{item.rows_count}</TableCell>
+                                                <TableCell className="py-3">{getStatusBadge(item.status)}</TableCell>
+                                                <TableCell className="py-3 font-mono text-xs tabular-nums">
                                                     {item.sap_doc_entry || (
                                                         <span className="text-muted-foreground">-</span>
                                                     )}
                                                 </TableCell>
-                                                <TableCell>{item.user.name}</TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center gap-1">
+                                                <TableCell className="py-3 text-xs">{item.user.name}</TableCell>
+                                                <TableCell className="py-3 text-right">
+                                                    <div className="flex items-center justify-end gap-1">
                                                         <Button
                                                             variant="ghost"
-                                                            size="sm"
+                                                            size="icon"
+                                                            className="h-8 w-8"
                                                             onClick={() => handleViewDetail(item.id)}
                                                             title="Ver detalle"
                                                         >
@@ -1227,7 +1291,8 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                                                         {item.status === 'failed' && (
                                                             <Button
                                                                 variant="ghost"
-                                                                size="sm"
+                                                                size="icon"
+                                                                className="h-8 w-8"
                                                                 onClick={() => handleReprocess(item.id)}
                                                                 disabled={reprocessingId === item.id}
                                                                 title="Reprocesar"
@@ -1242,14 +1307,14 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                                                         {(item.status === 'sent' || item.status === 'failed') && (
                                                             <Button
                                                                 variant="ghost"
-                                                                size="sm"
+                                                                size="icon"
+                                                                className="h-8 w-8 text-destructive hover:text-destructive"
                                                                 onClick={() => {
                                                                     setStatementToDelete(item);
                                                                     setDeleteDialogOpen(true);
                                                                 }}
                                                                 disabled={deletingId === item.id}
                                                                 title="Eliminar de SAP"
-                                                                className="text-red-500 hover:text-red-700"
                                                             >
                                                                 {deletingId === item.id ? (
                                                                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1265,20 +1330,20 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                                     </TableBody>
                                 </Table>
                             </div>
-                        )}
-                    </CardContent>
-                </Card>
+                        </div>
+                    )}
+                </PageSection>
             )}
 
             {/* Detail Modal */}
             <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-                <DialogContent className="!max-w-[90vw] !w-[1200px] max-h-[85vh] overflow-hidden flex flex-col">
+                <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col overflow-hidden">
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <FileSpreadsheet className="h-5 w-5" />
+                        <DialogTitle className="flex items-center gap-2 text-base">
+                            <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
                             Detalle del Extracto Bancario
                         </DialogTitle>
-                        <DialogDescription>
+                        <DialogDescription className="font-mono text-xs">
                             {detailData?.original_filename || 'Cargando...'}
                         </DialogDescription>
                     </DialogHeader>
@@ -1288,28 +1353,22 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                         </div>
                     ) : detailData ? (
-                        <div className="flex-1 overflow-y-auto space-y-4">
-                            {/* Info Grid */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                                <div className="space-y-1">
-                                    <p className="text-xs text-muted-foreground uppercase">Numero</p>
-                                    <p className="font-mono font-medium">{detailData.statement_number}</p>
-                                </div>
-                                <div className="space-y-1">
-                                    <p className="text-xs text-muted-foreground uppercase">Fecha</p>
-                                    <p className="font-medium">{detailData.statement_date}</p>
-                                </div>
-                                <div className="space-y-1">
-                                    <p className="text-xs text-muted-foreground uppercase">Estado</p>
-                                    <p>{getStatusBadge(detailData.status)}</p>
-                                </div>
-                                <div className="space-y-1">
-                                    <p className="text-xs text-muted-foreground uppercase">DocEntry SAP</p>
-                                    <p className="font-medium">{detailData.sap_doc_entry || '-'}</p>
-                                </div>
+                        <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                <InfoCell label="Número">
+                                    <span className="font-mono tabular-nums">{detailData.statement_number}</span>
+                                </InfoCell>
+                                <InfoCell label="Fecha">
+                                    <span className="tabular-nums">{detailData.statement_date}</span>
+                                </InfoCell>
+                                <InfoCell label="Estado">
+                                    <span>{getStatusBadge(detailData.status)}</span>
+                                </InfoCell>
+                                <InfoCell label="DocEntry SAP">
+                                    <span className="font-mono tabular-nums">{detailData.sap_doc_entry || '—'}</span>
+                                </InfoCell>
                             </div>
 
-                            {/* Error message if failed */}
                             {detailData.status === 'failed' && detailData.sap_error && (
                                 <Alert variant="destructive">
                                     <AlertCircle className="h-4 w-4" />
@@ -1318,7 +1377,6 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                                 </Alert>
                             )}
 
-                            {/* Cancelled indicator */}
                             {detailData.status === 'cancelled' && (
                                 <Alert className="border-orange-500 text-orange-700 dark:text-orange-400">
                                     <AlertTriangle className="h-4 w-4" />
@@ -1329,65 +1387,103 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                                 </Alert>
                             )}
 
-                            {/* Rows Table */}
+                            {(() => {
+                                const totalDebit = (detailData.rows ?? []).reduce(
+                                    (sum, r) => sum + parseFloat(String(r.DebitAmount ?? r.Debit ?? 0)),
+                                    0,
+                                );
+                                const totalCredit = (detailData.rows ?? []).reduce(
+                                    (sum, r) => sum + parseFloat(String(r.CreditAmount ?? r.Credit ?? 0)),
+                                    0,
+                                );
+                                return (
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <StatCard icon={FileSpreadsheet} label="Filas" value={detailData.rows?.length ?? 0} />
+                                        <StatCard icon={ArrowDownRight} label="Total Débito" value={`$${formatCurrency(totalDebit)}`} tone="danger" />
+                                        <StatCard icon={ArrowUpRight} label="Total Crédito" value={`$${formatCurrency(totalCredit)}`} tone="success" />
+                                    </div>
+                                );
+                            })()}
+
                             <div>
-                                <h4 className="font-medium mb-2 text-sm uppercase text-muted-foreground">
+                                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                     Transacciones ({detailData.rows?.length || 0})
                                 </h4>
-                                <div className="border rounded-lg overflow-hidden">
-                                    <div className="max-h-[300px] overflow-y-auto">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead className="w-12">#</TableHead>
-                                                    <TableHead className="w-24">SAP Seq</TableHead>
-                                                    <TableHead className="w-28">Fecha</TableHead>
-                                                    <TableHead>Descripcion</TableHead>
-                                                    <TableHead className="w-28">Cuenta SAP</TableHead>
-                                                    <TableHead className="w-28 text-right">Debito</TableHead>
-                                                    <TableHead className="w-28 text-right">Credito</TableHead>
+                                <div className="overflow-hidden rounded-md border">
+                                    <div className="max-h-[320px] overflow-auto">
+                                        <Table className="[&_td]:px-3 [&_th]:px-3">
+                                            <TableHeader className="sticky top-0 z-10 bg-muted/50 backdrop-blur-sm">
+                                                <TableRow className="hover:bg-muted/50">
+                                                    <TableHead className="h-10 w-12 text-xs font-semibold uppercase tracking-wide text-muted-foreground">#</TableHead>
+                                                    <TableHead className="h-10 w-24 text-xs font-semibold uppercase tracking-wide text-muted-foreground">SAP Seq</TableHead>
+                                                    <TableHead className="h-10 w-28 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fecha</TableHead>
+                                                    <TableHead className="h-10 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Descripción</TableHead>
+                                                    <TableHead className="h-10 w-28 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cuenta SAP</TableHead>
+                                                    <TableHead className="h-10 w-28 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Débito</TableHead>
+                                                    <TableHead className="h-10 w-28 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Crédito</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
                                                 {detailData.rows?.length === 0 ? (
                                                     <TableRow>
-                                                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                                                        <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                                                             No hay transacciones
                                                         </TableCell>
                                                     </TableRow>
                                                 ) : (
                                                     detailData.rows?.map((row, index) => {
-                                                        // Handle both old and new formats
                                                         const debit = parseFloat(String(row.DebitAmount ?? row.Debit ?? 0));
                                                         const credit = parseFloat(String(row.CreditAmount ?? row.Credit ?? 0));
                                                         const description = row.Memo ?? row.PaymentReference ?? row.Details ?? '';
                                                         const hasSapSequence = !!row.sap_sequence;
                                                         return (
-                                                            <TableRow key={index} className={!hasSapSequence && detailData.status === 'failed' ? 'bg-red-50 dark:bg-red-950/20' : ''}>
-                                                                <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                                                                <TableCell className="font-mono text-xs">
+                                                            <TableRow
+                                                                key={index}
+                                                                className={!hasSapSequence && detailData.status === 'failed' ? 'bg-destructive/5' : ''}
+                                                            >
+                                                                <TableCell className="py-2 font-mono text-xs tabular-nums text-muted-foreground">
+                                                                    {index + 1}
+                                                                </TableCell>
+                                                                <TableCell className="py-2 font-mono text-xs">
                                                                     {row.sap_sequence ? (
-                                                                        <span className="text-green-600">{row.sap_sequence}</span>
+                                                                        <span className="text-emerald-600 dark:text-emerald-400">
+                                                                            {row.sap_sequence}
+                                                                        </span>
                                                                     ) : (
-                                                                        <span className="text-red-500" title={row.sap_error || 'Pendiente'}>
+                                                                        <span
+                                                                            className="text-destructive"
+                                                                            title={row.sap_error || 'Pendiente'}
+                                                                        >
                                                                             {row.sap_error ? '✗ Error' : 'Pendiente'}
                                                                         </span>
                                                                     )}
                                                                 </TableCell>
-                                                                <TableCell className="text-xs">
-                                                                    {row.DueDate ? new Date(row.DueDate.replace(/T.*$/, 'T12:00:00')).toLocaleDateString('es-MX') : '-'}
+                                                                <TableCell className="py-2 whitespace-nowrap text-xs tabular-nums">
+                                                                    {row.DueDate ? new Date(row.DueDate.replace(/T.*$/, 'T12:00:00')).toLocaleDateString('es-MX') : '—'}
                                                                 </TableCell>
-                                                                <TableCell className="max-w-[250px] truncate" title={description}>
+                                                                <TableCell className="max-w-[260px] truncate py-2 text-sm" title={description}>
                                                                     {description}
                                                                 </TableCell>
-                                                                <TableCell className="font-mono text-xs">
-                                                                    {row.AccountCode || <span className="text-muted-foreground">-</span>}
+                                                                <TableCell className="py-2 font-mono text-xs">
+                                                                    {row.AccountCode || <span className="text-muted-foreground">—</span>}
                                                                 </TableCell>
-                                                                <TableCell className="text-right font-mono text-red-600">
-                                                                    {debit > 0 ? `$${formatCurrency(debit)}` : '-'}
+                                                                <TableCell className="py-2 text-right text-xs font-medium tabular-nums">
+                                                                    {debit > 0 ? (
+                                                                        <span className="text-rose-600 dark:text-rose-400">
+                                                                            ${formatCurrency(debit)}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-muted-foreground/40">—</span>
+                                                                    )}
                                                                 </TableCell>
-                                                                <TableCell className="text-right font-mono text-green-600">
-                                                                    {credit > 0 ? `$${formatCurrency(credit)}` : '-'}
+                                                                <TableCell className="py-2 text-right text-xs font-medium tabular-nums">
+                                                                    {credit > 0 ? (
+                                                                        <span className="text-emerald-600 dark:text-emerald-400">
+                                                                            ${formatCurrency(credit)}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-muted-foreground/40">—</span>
+                                                                    )}
                                                                 </TableCell>
                                                             </TableRow>
                                                         );
@@ -1399,13 +1495,20 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
                                 </div>
                             </div>
 
-                            {/* Footer info */}
-                            <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+                            <div className="flex items-center justify-between border-t pt-2 text-xs text-muted-foreground">
                                 <span>Creado por: {detailData.user?.name}</span>
-                                <span>Cuenta: {detailData.bank_account?.name} (SAP: {detailData.bank_account?.sap_bank_key})</span>
+                                <span>
+                                    Cuenta: {detailData.bank_account?.name} (SAP: {detailData.bank_account?.sap_bank_key})
+                                </span>
                             </div>
                         </div>
                     ) : null}
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDetailOpen(false)}>
+                            Cerrar
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 

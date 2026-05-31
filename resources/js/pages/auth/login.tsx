@@ -10,6 +10,7 @@ import { register } from '@/routes';
 import { store } from '@/routes/login';
 import { request } from '@/routes/password';
 import { Form, Head } from '@inertiajs/react';
+import { useEffect } from 'react';
 
 interface LoginProps {
     status?: string;
@@ -22,6 +23,11 @@ export default function Login({
     canResetPassword,
     canRegister,
 }: LoginProps) {
+    useEffect(() => {
+        // Reset per-session widgets so they reappear on the next login.
+        sessionStorage.removeItem('marie-floater-dismissed');
+    }, []);
+
     return (
         <AuthLayout
             title="Iniciar sesión"

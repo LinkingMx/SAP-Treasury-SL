@@ -15,9 +15,12 @@ import {
     Dialog,
     DialogContent,
     DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { InfoCell, StatCard } from '@/components/page/detail-bits';
+import { DollarSign, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -40,6 +43,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
+import { BatchStatusBadge } from '@/components/page/batch-status-badge';
+import { ColumnVisibilityMenu } from '@/components/page/column-visibility-menu';
+import { FilterField, FiltersCard } from '@/components/page/filters-card';
+import { InfoWidget } from '@/components/page/info-widget';
+import { PageHeader } from '@/components/page/page-header';
+import { PageSection } from '@/components/page/page-section';
+import { RowNumberBadge } from '@/components/page/row-number-badge';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { treasury } from '@/routes';
 import { downloadTemplate } from '@/actions/App/Http/Controllers/BatchController';
 import AiIngest from '@/components/treasury/AiIngest';
@@ -65,7 +76,11 @@ import {
     Copy,
     Download,
     Eye,
+    ClipboardList,
     FileSpreadsheet,
+    Filter,
+    Landmark,
+    ListChecks,
     Loader2,
     Play,
     RefreshCw,
@@ -73,6 +88,33 @@ import {
     Upload,
     X,
 } from 'lucide-react';
+
+const QUICK_STEP_DETAILS: { id: string; title: string; description: string }[] = [
+    {
+        id: 'upload',
+        title: 'Carga del archivo',
+        description:
+            'Subes el Excel/CSV del extracto bancario. Se valida tamaño y extensión antes de procesar.',
+    },
+    {
+        id: 'parse',
+        title: 'Lectura de filas',
+        description:
+            'Cada fila se convierte a una transacción normalizada (fecha + descripción + cargo/abono).',
+    },
+    {
+        id: 'persist',
+        title: 'Creación del lote',
+        description:
+            'Las transacciones se guardan como lote en estado Pendiente, listo para procesar.',
+    },
+    {
+        id: 'process',
+        title: 'Procesamiento a SAP',
+        description:
+            'Desde la tabla, el botón Play (▶) envía las transacciones al Service Layer de SAP B1.',
+    },
+];
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -331,15 +373,27 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
         });
     };
 
-    const getStatusLabel = (status: BatchStatus): string => {
-        const labels: Record<BatchStatus, string> = {
-            pending: 'Pendiente',
-            processing: 'Procesando',
-            completed: 'Completado',
-            failed: 'Fallido',
-        };
-        return labels[status];
+    const formatDateShort = (dateString: string): string => {
+        return new Date(dateString).toLocaleDateString('es-MX', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+        });
     };
+
+    const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({
+        archivo: false,
+        fecha: true,
+        estado: true,
+        registros: true,
+        debito: true,
+        credito: true,
+    });
+
+    const hasProcessingBatches = useMemo(
+        () => batches.some((batch) => batch.status === 'processing'),
+        [batches],
+    );
 
     const handleBranchChange = (value: string) => {
         setSelectedBranch(value);
@@ -500,7 +554,12 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="AC Tesorería" />
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
+            <div className="space-y-6 p-4 md:p-6">
+                <PageHeader
+                    icon={Landmark}
+                    title="AC Tesorería"
+                    description="Carga de extractos bancarios y envío a SAP — manual o asistido por IA."
+                />
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <TabsList className="grid w-full grid-cols-2 max-w-md">
                         <TabsTrigger value="quick" className="flex items-center gap-2">
@@ -526,68 +585,57 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                     </TabsContent>
 
                     <TabsContent value="quick" className="mt-4 space-y-4">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Automatizacion de asientos contables</CardTitle>
-                        <CardDescription>
-                            Carga de asientos contables con contrapartidas para movimientos
-                            bancarios desde Extractos bancarios
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        {/* Selects Row */}
-                        <div className="grid gap-4 md:grid-cols-2">
-                            <div className="grid gap-2">
-                                <Label htmlFor="branch">Sucursal</Label>
-                                <Select value={selectedBranch} onValueChange={handleBranchChange}>
-                                    <SelectTrigger id="branch">
-                                        <SelectValue placeholder="Selecciona una sucursal" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {branches.map((branch) => (
-                                            <SelectItem key={branch.id} value={String(branch.id)}>
-                                                {branch.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="bankAccount">Cuenta Bancaria</Label>
-                                <Select
-                                    value={selectedBankAccount}
-                                    onValueChange={setSelectedBankAccount}
-                                    disabled={!selectedBranch}
-                                >
-                                    <SelectTrigger id="bankAccount">
-                                        <SelectValue placeholder="Selecciona una cuenta" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {filteredBankAccounts.map((account) => (
-                                            <SelectItem key={account.id} value={String(account.id)}>
-                                                {account.name} - {account.account}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
+                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                            <FiltersCard icon={Filter} columns={2} className="lg:col-span-2">
+                                <FilterField label="Sucursal" htmlFor="branch">
+                                    <Select value={selectedBranch} onValueChange={handleBranchChange}>
+                                        <SelectTrigger id="branch">
+                                            <SelectValue placeholder="Selecciona una sucursal" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {branches.map((branch) => (
+                                                <SelectItem key={branch.id} value={String(branch.id)}>
+                                                    {branch.name}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </FilterField>
+                                <FilterField label="Cuenta Bancaria" htmlFor="bankAccount">
+                                    <Select
+                                        value={selectedBankAccount}
+                                        onValueChange={setSelectedBankAccount}
+                                        disabled={!selectedBranch}
+                                    >
+                                        <SelectTrigger id="bankAccount">
+                                            <SelectValue placeholder="Selecciona una cuenta" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {filteredBankAccounts.map((account) => (
+                                                <SelectItem key={account.id} value={String(account.id)}>
+                                                    {account.name} - {account.account}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </FilterField>
 
-                        {/* File Upload Row */}
-                        <div className="space-y-4">
-                            <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-                                <div className="grid gap-2">
+                                <div className="space-y-2 md:col-span-2">
                                     <div className="flex items-center justify-between">
-                                        <Label htmlFor="file">Archivo Excel</Label>
+                                        <Label
+                                            htmlFor="file"
+                                            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                                        >
+                                            Archivo del Banco
+                                        </Label>
                                         <a
                                             href={downloadTemplate.url()}
-                                            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
                                         >
                                             <Download className="h-3 w-3" />
-                                            Descargar plantilla de ejemplo
+                                            Descargar plantilla
                                         </a>
                                     </div>
-                                    {/* Hidden native input */}
                                     <input
                                         ref={fileInputRef}
                                         id="file"
@@ -597,85 +645,90 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                                         disabled={!selectedBankAccount || isUploading}
                                         className="sr-only"
                                     />
-                                    {/* Custom file drop zone */}
-                                    {!selectedFile ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => fileInputRef.current?.click()}
-                                            disabled={!selectedBankAccount || isUploading}
-                                            className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/50 px-6 py-8 text-center transition-colors hover:border-muted-foreground/50 hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
-                                        >
-                                            <div className="rounded-full bg-background p-3 shadow-sm">
-                                                <Upload className="h-6 w-6 text-muted-foreground" />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <p className="text-sm font-medium">
-                                                    Haz clic para seleccionar archivo
-                                                </p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    Formatos: .xlsx, .xls
-                                                </p>
-                                            </div>
-                                        </button>
-                                    ) : (
-                                        <div className="flex items-center gap-3 rounded-lg border bg-muted/50 p-3">
-                                            <div className="rounded-lg bg-green-500/10 p-2">
-                                                <FileSpreadsheet className="h-5 w-5 text-green-600" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium truncate">
-                                                    {selectedFile.name}
-                                                </p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {formatFileSize(selectedFile.size)}
-                                                </p>
-                                            </div>
-                                            {!isUploading && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon-sm"
-                                                    className="shrink-0 text-muted-foreground hover:text-foreground"
-                                                    onClick={handleRemoveFile}
-                                                >
-                                                    <X className="h-4 w-4" />
-                                                    <span className="sr-only">Remover archivo</span>
-                                                </Button>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex items-end">
-                                    <Button onClick={handleUpload} disabled={!canUpload}>
-                                        {isUploading ? (
-                                            <>
-                                                <Loader2 className="h-4 w-4 animate-spin" />
-                                                Procesando...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Upload className="h-4 w-4" />
-                                                Cargar Excel
-                                            </>
-                                        )}
-                                    </Button>
-                                </div>
-                            </div>
-
-                            {/* Progress Bar */}
-                            {isUploading && (
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-sm">
-                                        <span className="text-muted-foreground">
-                                            {getStatusMessage()}
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={!selectedBankAccount || isUploading}
+                                        className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-dashed border-input bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        <Upload className="h-4 w-4" />
+                                        <span className="truncate">
+                                            {selectedFile
+                                                ? `${selectedFile.name} · ${formatFileSize(selectedFile.size)}`
+                                                : 'Seleccionar archivo Excel'}
                                         </span>
-                                        <span className="font-medium">{uploadProgress}%</span>
+                                        {selectedFile && !isUploading ? (
+                                            <span
+                                                role="button"
+                                                aria-label="Remover archivo"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleRemoveFile();
+                                                }}
+                                                className="ml-2 inline-flex items-center text-muted-foreground hover:text-foreground"
+                                            >
+                                                <X className="h-3.5 w-3.5" />
+                                            </span>
+                                        ) : null}
+                                    </button>
+                                    <p className="text-xs text-muted-foreground">
+                                        Formatos soportados: Excel (.xlsx, .xls).
+                                    </p>
+                                    <div className="flex justify-end pt-1">
+                                        <Button onClick={handleUpload} disabled={!canUpload}>
+                                            {isUploading ? (
+                                                <>
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                    Procesando...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Upload className="h-4 w-4" />
+                                                    Cargar Excel
+                                                </>
+                                            )}
+                                        </Button>
                                     </div>
-                                    <Progress value={uploadProgress} className="h-2" />
                                 </div>
-                            )}
+                            </FiltersCard>
+
+                            <InfoWidget
+                                title="Cómo funciona"
+                                icon={ListChecks}
+                                footer="El lote queda Pendiente hasta procesarlo manualmente."
+                            >
+                                <Accordion type="single" collapsible className="w-full">
+                                    {QUICK_STEP_DETAILS.map((step, i) => (
+                                        <AccordionItem key={step.id} value={step.id}>
+                                            <AccordionTrigger className="py-2.5 hover:no-underline">
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold tabular-nums text-muted-foreground">
+                                                        {i + 1}
+                                                    </span>
+                                                    <span className="text-sm font-medium">{step.title}</span>
+                                                </div>
+                                            </AccordionTrigger>
+                                            <AccordionContent className="pl-7 text-xs text-muted-foreground">
+                                                {step.description}
+                                            </AccordionContent>
+                                        </AccordionItem>
+                                    ))}
+                                </Accordion>
+                            </InfoWidget>
                         </div>
 
-                        {/* Success Alert */}
+                        {isUploading && (
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="text-muted-foreground">
+                                        {getStatusMessage()}
+                                    </span>
+                                    <span className="font-medium">{uploadProgress}%</span>
+                                </div>
+                                <Progress value={uploadProgress} className="h-2" />
+                            </div>
+                        )}
+
                         {successResult && (
                             <Alert variant="success">
                                 <CheckCircle2 className="h-4 w-4" />
@@ -711,7 +764,6 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                             </Alert>
                         )}
 
-                        {/* Error Alert */}
                         {errors.length > 0 && (
                             <Alert variant="destructive">
                                 <AlertCircle className="h-4 w-4" />
@@ -747,18 +799,33 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                                 </AlertDescription>
                             </Alert>
                         )}
-                    </CardContent>
-                </Card>
 
-                {/* Batches Section */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Lotes de Transacción</CardTitle>
-                        <CardDescription>
-                            Historial de lotes procesados para la sucursal y cuenta seleccionadas
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
+                        <PageSection
+                            icon={ClipboardList}
+                            title="Lotes de Transacción"
+                            description="Historial de lotes procesados para la sucursal y cuenta seleccionadas."
+                            action={
+                                <div className="flex items-center gap-2">
+                                    {hasProcessingBatches && (
+                                        <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                                    )}
+                                    <ColumnVisibilityMenu
+                                        columns={[
+                                            { key: 'archivo', label: 'Archivo' },
+                                            { key: 'fecha', label: 'Fecha' },
+                                            { key: 'estado', label: 'Estado' },
+                                            { key: 'registros', label: 'Registros' },
+                                            { key: 'debito', label: 'Total Débito' },
+                                            { key: 'credito', label: 'Total Crédito' },
+                                        ]}
+                                        visibility={columnVisibility}
+                                        onChange={(k, v) =>
+                                            setColumnVisibility((s) => ({ ...s, [k]: v }))
+                                        }
+                                    />
+                                </div>
+                            }
+                        >
                         {!selectedBranch || !selectedBankAccount ? (
                             <div className="flex items-center justify-center py-8 text-muted-foreground">
                                 <p>Selecciona sucursal y cuenta para ver lotes</p>
@@ -773,45 +840,77 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>UUID</TableHead>
-                                            <TableHead>Archivo</TableHead>
-                                            <TableHead>Fecha procesado</TableHead>
-                                            <TableHead>Estado</TableHead>
-                                            <TableHead className="text-right">Registros</TableHead>
-                                            <TableHead className="text-right">Total Débito</TableHead>
-                                            <TableHead className="text-right">Total Crédito</TableHead>
-                                            <TableHead className="text-right">Acciones</TableHead>
+                                <div className="overflow-hidden rounded-md border">
+                                <Table className="[&_td]:px-4 [&_th]:px-4">
+                                    <TableHeader className="bg-muted/50">
+                                        <TableRow className="hover:bg-muted/50">
+                                            <TableHead className="h-11 w-20 text-xs font-semibold uppercase tracking-wide text-muted-foreground">#</TableHead>
+                                            {columnVisibility.archivo && (
+                                                <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Archivo</TableHead>
+                                            )}
+                                            {columnVisibility.fecha && (
+                                                <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fecha</TableHead>
+                                            )}
+                                            {columnVisibility.estado && (
+                                                <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Estado</TableHead>
+                                            )}
+                                            {columnVisibility.registros && (
+                                                <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Registros</TableHead>
+                                            )}
+                                            {columnVisibility.debito && (
+                                                <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total Débito</TableHead>
+                                            )}
+                                            {columnVisibility.credito && (
+                                                <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total Crédito</TableHead>
+                                            )}
+                                            <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Acciones</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {batches.map((batch) => (
                                             <TableRow key={batch.id}>
-                                                <TableCell className="font-mono text-xs">
-                                                    {batch.uuid.substring(0, 8)}...
+                                                <TableCell className="py-3">
+                                                    <RowNumberBadge id={batch.id} />
                                                 </TableCell>
-                                                <TableCell className="max-w-[200px] truncate">
-                                                    {batch.filename}
-                                                </TableCell>
-                                                <TableCell>{formatDate(batch.created_at)}</TableCell>
-                                                <TableCell>
-                                                    <Badge
-                                                        variant={batch.status === 'failed' ? 'destructive' : 'default'}
-                                                    >
-                                                        {getStatusLabel(batch.status)}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    {batch.total_records}
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    ${formatCurrency(batch.total_debit)}
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    ${formatCurrency(batch.total_credit)}
-                                                </TableCell>
+                                                {columnVisibility.archivo && (
+                                                    <TableCell className="max-w-[200px] truncate py-3">
+                                                        {batch.filename}
+                                                    </TableCell>
+                                                )}
+                                                {columnVisibility.fecha && (
+                                                    <TableCell className="py-3">
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <span className="cursor-default">
+                                                                    {formatDateShort(batch.created_at)}
+                                                                </span>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                {formatDate(batch.created_at)}
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </TableCell>
+                                                )}
+                                                {columnVisibility.estado && (
+                                                    <TableCell className="py-3">
+                                                        <BatchStatusBadge status={batch.status} />
+                                                    </TableCell>
+                                                )}
+                                                {columnVisibility.registros && (
+                                                    <TableCell className="py-3 text-right tabular-nums">
+                                                        {batch.total_records}
+                                                    </TableCell>
+                                                )}
+                                                {columnVisibility.debito && (
+                                                    <TableCell className="py-3 text-right tabular-nums">
+                                                        ${formatCurrency(batch.total_debit)}
+                                                    </TableCell>
+                                                )}
+                                                {columnVisibility.credito && (
+                                                    <TableCell className="py-3 text-right tabular-nums">
+                                                        ${formatCurrency(batch.total_credit)}
+                                                    </TableCell>
+                                                )}
                                                 <TableCell className="text-right">
                                                     <div className="flex justify-end gap-2">
                                                         <Tooltip>
@@ -877,6 +976,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                                         ))}
                                     </TableBody>
                                 </Table>
+                                </div>
 
                                 {/* Pagination */}
                                 {batchesPagination.lastPage > 1 && (
@@ -919,8 +1019,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                                 )}
                             </div>
                         )}
-                    </CardContent>
-                </Card>
+                        </PageSection>
                     </TabsContent>
                 </Tabs>
             </div>
@@ -960,13 +1059,13 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
 
             {/* Batch Detail Modal */}
             <Dialog open={batchDetailOpen} onOpenChange={setBatchDetailOpen}>
-                <DialogContent className="!max-w-[90vw] !w-[1400px] max-h-[85vh] overflow-hidden flex flex-col">
+                <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col overflow-hidden">
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-3">
-                            <FileSpreadsheet className="h-5 w-5" />
+                        <DialogTitle className="flex items-center gap-2 text-base">
+                            <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
                             Detalle del Lote
                         </DialogTitle>
-                        <DialogDescription>
+                        <DialogDescription className="font-mono text-xs">
                             {batchDetail?.filename || 'Cargando...'}
                         </DialogDescription>
                     </DialogHeader>
@@ -976,14 +1075,11 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                         </div>
                     ) : batchDetail ? (
-                        <div className="flex-1 overflow-y-auto space-y-6">
-                            {/* Batch Info - Reorganized */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                                {/* UUID with copy */}
-                                <div className="space-y-1">
-                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">UUID</p>
-                                    <div className="flex items-center gap-2">
-                                        <code className="text-sm bg-muted px-2 py-1 rounded">
+                        <div className="flex-1 space-y-6 overflow-y-auto pr-1">
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                <InfoCell label="UUID">
+                                    <div className="flex items-center gap-1.5">
+                                        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
                                             {batchDetail.uuid.substring(0, 8)}
                                         </code>
                                         <Tooltip>
@@ -991,41 +1087,31 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className="h-7 w-7"
+                                                    className="h-6 w-6"
                                                     onClick={() => {
                                                         navigator.clipboard.writeText(batchDetail.uuid);
                                                     }}
                                                 >
-                                                    <Copy className="h-3.5 w-3.5" />
+                                                    <Copy className="h-3 w-3" />
                                                 </Button>
                                             </TooltipTrigger>
                                             <TooltipContent>Copiar UUID completo</TooltipContent>
                                         </Tooltip>
                                     </div>
-                                </div>
-
-                                {/* Fecha */}
-                                <div className="space-y-1">
-                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Procesado</p>
-                                    <p className="font-medium">
-                                        {batchDetail.processed_at ? formatDate(batchDetail.processed_at) : '-'}
-                                    </p>
-                                </div>
-
-                                {/* Sucursal */}
-                                <div className="space-y-1">
-                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Sucursal</p>
-                                    <p className="font-medium">{batchDetail.branch?.name || '-'}</p>
-                                </div>
-
-                                {/* Cuenta */}
-                                <div className="space-y-1">
-                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Cuenta</p>
-                                    <p className="font-medium">{batchDetail.bank_account?.name || '-'}</p>
-                                </div>
+                                </InfoCell>
+                                <InfoCell label="Procesado">
+                                    <span className="tabular-nums">
+                                        {batchDetail.processed_at ? formatDate(batchDetail.processed_at) : '—'}
+                                    </span>
+                                </InfoCell>
+                                <InfoCell label="Sucursal">
+                                    <span className="block truncate">{batchDetail.branch?.name || '—'}</span>
+                                </InfoCell>
+                                <InfoCell label="Cuenta">
+                                    <span className="block truncate">{batchDetail.bank_account?.name || '—'}</span>
+                                </InfoCell>
                             </div>
 
-                            {/* Batch Error Message */}
                             {batchDetail.status === 'failed' && batchDetail.error_message && (
                                 <Alert variant="destructive" className="py-3">
                                     <AlertCircle className="h-4 w-4" />
@@ -1036,72 +1122,52 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                                 </Alert>
                             )}
 
-                            {/* Summary Cards */}
                             <div className="grid grid-cols-3 gap-3">
-                                <div className="bg-muted/50 rounded-lg p-3 text-center">
-                                    <p className="text-xl md:text-2xl font-bold">{batchDetail.total_records}</p>
-                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Registros</p>
-                                </div>
-                                <div className="bg-red-500/10 rounded-lg p-3 text-center">
-                                    <p className="text-lg md:text-xl font-bold text-red-500 tabular-nums">
-                                        ${formatCurrency(batchDetail.total_debit)}
-                                    </p>
-                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Débito</p>
-                                </div>
-                                <div className="bg-green-500/10 rounded-lg p-3 text-center">
-                                    <p className="text-lg md:text-xl font-bold text-green-500 tabular-nums">
-                                        ${formatCurrency(batchDetail.total_credit)}
-                                    </p>
-                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Total Crédito</p>
-                                </div>
+                                <StatCard icon={FileSpreadsheet} label="Registros" value={batchDetail.total_records} />
+                                <StatCard icon={ArrowDownRight} label="Total Débito" value={`$${formatCurrency(batchDetail.total_debit)}`} tone="danger" />
+                                <StatCard icon={ArrowUpRight} label="Total Crédito" value={`$${formatCurrency(batchDetail.total_credit)}`} tone="success" />
                             </div>
 
-                            {/* Transactions Table */}
                             <div>
-                                <h4 className="font-medium mb-3 text-sm uppercase tracking-wide text-muted-foreground">
+                                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                     Transacciones ({batchDetail.transactions.length})
                                 </h4>
-                                <div className="border rounded-lg overflow-hidden">
-                                    <div className="max-h-[280px] overflow-y-auto overflow-x-auto">
+                                <div className="overflow-hidden rounded-md border">
+                                    <div className="max-h-[320px] overflow-auto">
                                         <table className="w-full min-w-[700px] text-sm">
-                                            <thead className="sticky top-0 bg-muted/95 backdrop-blur-sm border-b">
+                                            <thead className="sticky top-0 z-10 bg-muted/50 backdrop-blur-sm">
                                                 <tr>
-                                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground w-12">#</th>
-                                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground w-24">Fecha</th>
-                                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground">Memo</th>
-                                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground w-32">Cuenta</th>
-                                                    <th className="px-3 py-2 text-right font-medium text-muted-foreground w-28">Débito</th>
-                                                    <th className="px-3 py-2 text-right font-medium text-muted-foreground w-28">Crédito</th>
-                                                    <th className="px-3 py-2 text-right font-medium text-muted-foreground w-28">N° SAP</th>
-                                                    <th className="px-3 py-2 text-left font-medium text-muted-foreground w-40">Error</th>
-                                                    <th className="px-3 py-2 text-center font-medium text-muted-foreground w-20">Acciones</th>
+                                                    <th className="w-12 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">#</th>
+                                                    <th className="w-24 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fecha</th>
+                                                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Memo</th>
+                                                    <th className="w-32 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cuenta</th>
+                                                    <th className="w-28 px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Débito</th>
+                                                    <th className="w-28 px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Crédito</th>
+                                                    <th className="w-28 px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">N° SAP</th>
+                                                    <th className="w-40 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Error</th>
+                                                    <th className="w-16 px-3 py-2 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground"></th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-border">
                                                 {batchDetail.transactions.length === 0 ? (
                                                     <tr>
-                                                        <td
-                                                            colSpan={9}
-                                                            className="text-center text-muted-foreground py-8"
-                                                        >
+                                                        <td colSpan={9} className="py-8 text-center text-muted-foreground">
                                                             No hay transacciones en este lote
                                                         </td>
                                                     </tr>
                                                 ) : (
                                                     batchDetail.transactions.map((transaction) => (
-                                                        <tr key={transaction.id} className="hover:bg-muted/50">
-                                                            <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                                                        <tr key={transaction.id} className="hover:bg-muted/30">
+                                                            <td className="px-3 py-2 font-mono text-xs tabular-nums text-muted-foreground">
                                                                 {transaction.sequence}
                                                             </td>
-                                                            <td className="px-3 py-2 text-xs whitespace-nowrap">
-                                                                {new Date(transaction.due_date).toLocaleDateString(
-                                                                    'es-MX'
-                                                                )}
+                                                            <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums">
+                                                                {new Date(transaction.due_date).toLocaleDateString('es-MX')}
                                                             </td>
                                                             <td className="px-3 py-2">
                                                                 <Tooltip>
                                                                     <TooltipTrigger asChild>
-                                                                        <span className="block truncate max-w-[220px] cursor-default">
+                                                                        <span className="block max-w-[220px] cursor-default truncate text-sm">
                                                                             {transaction.memo}
                                                                         </span>
                                                                     </TooltipTrigger>
@@ -1110,43 +1176,41 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                                                                     </TooltipContent>
                                                                 </Tooltip>
                                                             </td>
-                                                            <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">
+                                                            <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
                                                                 {transaction.counterpart_account}
                                                             </td>
-                                                            <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                                                            <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
                                                                 {Number(transaction.debit_amount) > 0 ? (
-                                                                    <span className="text-red-500 font-medium">
+                                                                    <span className="text-xs font-medium text-rose-600 dark:text-rose-400">
                                                                         ${formatCurrency(transaction.debit_amount)}
                                                                     </span>
                                                                 ) : (
-                                                                    <span className="text-muted-foreground/40">-</span>
+                                                                    <span className="text-muted-foreground/40">—</span>
                                                                 )}
                                                             </td>
-                                                            <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                                                            <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
                                                                 {Number(transaction.credit_amount) > 0 ? (
-                                                                    <span className="text-green-500 font-medium">
+                                                                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
                                                                         ${formatCurrency(transaction.credit_amount)}
                                                                     </span>
                                                                 ) : (
-                                                                    <span className="text-muted-foreground/40">-</span>
+                                                                    <span className="text-muted-foreground/40">—</span>
                                                                 )}
                                                             </td>
-                                                            <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                                                            <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
                                                                 {transaction.sap_number !== null ? (
                                                                     <span className="font-mono text-xs">
                                                                         {transaction.sap_number}
                                                                     </span>
                                                                 ) : (
-                                                                    <span className="text-muted-foreground text-xs">
-                                                                        No procesado
-                                                                    </span>
+                                                                    <span className="text-xs text-muted-foreground">—</span>
                                                                 )}
                                                             </td>
-                                                            <td className="px-3 py-2 text-left">
+                                                            <td className="px-3 py-2">
                                                                 {transaction.error ? (
                                                                     <Tooltip>
                                                                         <TooltipTrigger asChild>
-                                                                            <span className="text-xs text-destructive truncate block max-w-[150px] cursor-default">
+                                                                            <span className="block max-w-[150px] cursor-default truncate text-xs text-destructive">
                                                                                 {transaction.error}
                                                                             </span>
                                                                         </TooltipTrigger>
@@ -1155,43 +1219,31 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                                                                         </TooltipContent>
                                                                     </Tooltip>
                                                                 ) : (
-                                                                    <span className="text-muted-foreground/40 text-xs">-</span>
+                                                                    <span className="text-xs text-muted-foreground/40">—</span>
                                                                 )}
                                                             </td>
                                                             <td className="px-3 py-2 text-center">
-                                                                {transaction.sap_number === null &&
-                                                                batchDetail.status !== 'completed' ? (
+                                                                {transaction.sap_number === null && batchDetail.status !== 'completed' ? (
                                                                     <Tooltip>
                                                                         <TooltipTrigger asChild>
                                                                             <Button
                                                                                 variant="ghost"
                                                                                 size="icon"
                                                                                 className="h-7 w-7"
-                                                                                onClick={() =>
-                                                                                    handleReprocessTransaction(
-                                                                                        transaction.id
-                                                                                    )
-                                                                                }
-                                                                                disabled={
-                                                                                    reprocessingTransactionId !== null
-                                                                                }
+                                                                                onClick={() => handleReprocessTransaction(transaction.id)}
+                                                                                disabled={reprocessingTransactionId !== null}
                                                                             >
-                                                                                {reprocessingTransactionId ===
-                                                                                transaction.id ? (
+                                                                                {reprocessingTransactionId === transaction.id ? (
                                                                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                                                                 ) : (
                                                                                     <RefreshCw className="h-3.5 w-3.5" />
                                                                                 )}
                                                                             </Button>
                                                                         </TooltipTrigger>
-                                                                        <TooltipContent>
-                                                                            Reprocesar transacción
-                                                                        </TooltipContent>
+                                                                        <TooltipContent>Reprocesar</TooltipContent>
                                                                     </Tooltip>
                                                                 ) : (
-                                                                    <span className="text-muted-foreground/40 text-xs">
-                                                                        -
-                                                                    </span>
+                                                                    <span className="text-xs text-muted-foreground/40">—</span>
                                                                 )}
                                                             </td>
                                                         </tr>
@@ -1203,12 +1255,17 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
                                 </div>
                             </div>
 
-                            {/* Footer info */}
-                            <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-                                <span>Creado por: {batchDetail.user || 'Sistema'}</span>
+                            <div className="border-t pt-2 text-xs text-muted-foreground">
+                                Creado por: {batchDetail.user || 'Sistema'}
                             </div>
                         </div>
                     ) : null}
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setBatchDetailOpen(false)}>
+                            Cerrar
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </AppLayout>

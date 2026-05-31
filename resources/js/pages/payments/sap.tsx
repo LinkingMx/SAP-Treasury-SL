@@ -15,12 +15,23 @@ import {
     Dialog,
     DialogContent,
     DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { InfoCell, StatCard } from '@/components/page/detail-bits';
+import { DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ActivityHeatmap } from '@/components/page/activity-heatmap';
+import { BatchStatusBadge } from '@/components/page/batch-status-badge';
+import { ColumnVisibilityMenu } from '@/components/page/column-visibility-menu';
+import { FilterField, FiltersCard } from '@/components/page/filters-card';
+import { InfoWidget } from '@/components/page/info-widget';
+import { PageHeader } from '@/components/page/page-header';
+import { PageSection } from '@/components/page/page-section';
+import { RowNumberBadge } from '@/components/page/row-number-badge';
 import { Progress } from '@/components/ui/progress';
 import {
     Select,
@@ -55,18 +66,22 @@ import type {
 } from '@/types/vendorPayments';
 import { Head } from '@inertiajs/react';
 import {
+    Activity,
     AlertCircle,
     CheckCircle2,
     ChevronLeft,
     ChevronRight,
+    ClipboardList,
     Download,
     Eye,
     FileSpreadsheet,
+    Filter,
     Loader2,
     Play,
     RefreshCw,
     Trash2,
     Upload,
+    Wallet,
     X,
 } from 'lucide-react';
 
@@ -80,11 +95,12 @@ const breadcrumbs: BreadcrumbItem[] = [
 interface Props {
     branches: Branch[];
     bankAccounts: BankAccount[];
+    activityData?: Record<string, number>;
 }
 
 type UploadStatus = 'idle' | 'validating' | 'processing' | 'success' | 'error';
 
-export default function PagosSap({ branches, bankAccounts }: Props) {
+export default function PagosSap({ branches, bankAccounts, activityData = {} }: Props) {
     const [selectedBranch, setSelectedBranch] = useState<string>('');
     const [selectedBankAccount, setSelectedBankAccount] = useState<string>('');
     const [processDate, setProcessDate] = useState<string>('');
@@ -330,15 +346,22 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
         });
     };
 
-    const getStatusLabel = (status: VendorPaymentBatch['status']): string => {
-        const labels = {
-            pending: 'Pendiente',
-            processing: 'Procesando',
-            completed: 'Completado',
-            failed: 'Fallido',
-        };
-        return labels[status];
+    const formatDateShort = (dateString: string): string => {
+        return new Date(dateString).toLocaleDateString('es-MX', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+        });
     };
+
+    const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({
+        archivo: false,
+        fecha: true,
+        estado: true,
+        facturas: true,
+        pagos: true,
+        monto: true,
+    });
 
     const handleBranchChange = (value: string) => {
         setSelectedBranch(value);
@@ -524,252 +547,240 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Pagos a SAP" />
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Pagos a Proveedores</CardTitle>
-                        <CardDescription>
-                            Carga masiva de pagos a proveedores con liquidación de facturas
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        {/* Selects Row */}
-                        <div className="grid gap-4 md:grid-cols-3">
-                            <div className="grid gap-2">
-                                <Label htmlFor="branch">Sucursal</Label>
-                                <Select value={selectedBranch} onValueChange={handleBranchChange}>
-                                    <SelectTrigger id="branch">
-                                        <SelectValue placeholder="Selecciona una sucursal" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {branches.map((branch) => (
-                                            <SelectItem key={branch.id} value={String(branch.id)}>
-                                                {branch.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="bankAccount">Cuenta Bancaria</Label>
-                                <Select
-                                    value={selectedBankAccount}
-                                    onValueChange={setSelectedBankAccount}
-                                    disabled={!selectedBranch}
+            <div className="space-y-6 p-4 md:p-6">
+                <PageHeader
+                    icon={Wallet}
+                    title="Pagos a SAP"
+                    description="Carga masiva de pagos a proveedores con liquidación de facturas."
+                />
+
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                    <FiltersCard icon={Filter} columns={3} className="lg:col-span-2">
+                        <FilterField label="Sucursal" htmlFor="branch">
+                            <Select value={selectedBranch} onValueChange={handleBranchChange}>
+                                <SelectTrigger id="branch">
+                                    <SelectValue placeholder="Selecciona una sucursal" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {branches.map((branch) => (
+                                        <SelectItem key={branch.id} value={String(branch.id)}>
+                                            {branch.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </FilterField>
+                        <FilterField label="Cuenta Bancaria" htmlFor="bankAccount">
+                            <Select
+                                value={selectedBankAccount}
+                                onValueChange={setSelectedBankAccount}
+                                disabled={!selectedBranch}
+                            >
+                                <SelectTrigger id="bankAccount">
+                                    <SelectValue placeholder="Selecciona una cuenta" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {filteredBankAccounts.map((account) => (
+                                        <SelectItem key={account.id} value={String(account.id)}>
+                                            {account.name} - {account.account}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </FilterField>
+                        <FilterField label="Fecha de Proceso" htmlFor="processDate">
+                            <Input
+                                id="processDate"
+                                type="date"
+                                value={processDate}
+                                onChange={(e) => setProcessDate(e.target.value)}
+                                disabled={!selectedBankAccount}
+                            />
+                        </FilterField>
+                        <div className="space-y-2 lg:col-span-3">
+                            <div className="flex items-center justify-between">
+                                <Label
+                                    htmlFor="file"
+                                    className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                                 >
-                                    <SelectTrigger id="bankAccount">
-                                        <SelectValue placeholder="Selecciona una cuenta" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {filteredBankAccounts.map((account) => (
-                                            <SelectItem key={account.id} value={String(account.id)}>
-                                                {account.name} - {account.account}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                    Archivo del Banco
+                                </Label>
+                                <a
+                                    href="/payments/sap/template/download"
+                                    className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                                >
+                                    <Download className="h-3 w-3" />
+                                    Descargar plantilla
+                                </a>
                             </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="processDate">Fecha de Proceso</Label>
-                                <input
-                                    id="processDate"
-                                    type="date"
-                                    value={processDate}
-                                    onChange={(e) => setProcessDate(e.target.value)}
-                                    disabled={!selectedBankAccount}
-                                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                                />
-                            </div>
-                        </div>
-
-                        {/* File Upload Row */}
-                        <div className="space-y-4">
-                            <div className="grid gap-4 md:grid-cols-[1fr_auto]">
-                                <div className="grid gap-2">
-                                    <div className="flex items-center justify-between">
-                                        <Label htmlFor="file">Archivo Excel</Label>
-                                        <a
-                                            href="/payments/sap/template/download"
-                                            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                                        >
-                                            <Download className="h-3 w-3" />
-                                            Descargar plantilla de ejemplo
-                                        </a>
-                                    </div>
-                                    <input
-                                        ref={fileInputRef}
-                                        id="file"
-                                        type="file"
-                                        accept=".xlsx,.xls"
-                                        onChange={handleFileChange}
-                                        disabled={!selectedBankAccount || isUploading}
-                                        className="sr-only"
-                                    />
-                                    {!selectedFile ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => fileInputRef.current?.click()}
-                                            disabled={!selectedBankAccount || isUploading}
-                                            className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/25 bg-muted/50 px-6 py-8 text-center transition-colors hover:border-muted-foreground/50 hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
-                                        >
-                                            <div className="rounded-full bg-background p-3 shadow-sm">
-                                                <Upload className="h-6 w-6 text-muted-foreground" />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <p className="text-sm font-medium">
-                                                    Haz clic para seleccionar archivo
-                                                </p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    Formatos: .xlsx, .xls
-                                                </p>
-                                            </div>
-                                        </button>
-                                    ) : (
-                                        <div className="flex items-center gap-3 rounded-lg border bg-muted/50 p-3">
-                                            <div className="rounded-lg bg-green-500/10 p-2">
-                                                <FileSpreadsheet className="h-5 w-5 text-green-600" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium truncate">
-                                                    {selectedFile.name}
-                                                </p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {formatFileSize(selectedFile.size)}
-                                                </p>
-                                            </div>
-                                            {!isUploading && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon-sm"
-                                                    className="shrink-0 text-muted-foreground hover:text-foreground"
-                                                    onClick={handleRemoveFile}
-                                                >
-                                                    <X className="h-4 w-4" />
-                                                    <span className="sr-only">Remover archivo</span>
-                                                </Button>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex items-end">
-                                    <Button onClick={handleUpload} disabled={!canUpload}>
-                                        {isUploading ? (
-                                            <>
-                                                <Loader2 className="h-4 w-4 animate-spin" />
-                                                Procesando...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Upload className="h-4 w-4" />
-                                                Cargar Excel
-                                            </>
-                                        )}
-                                    </Button>
-                                </div>
-                            </div>
-
-                            {/* Progress Bar */}
-                            {isUploading && (
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-sm">
-                                        <span className="text-muted-foreground">
-                                            {getStatusMessage()}
-                                        </span>
-                                        <span className="font-medium">{uploadProgress}%</span>
-                                    </div>
-                                    <Progress value={uploadProgress} className="h-2" />
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Success Alert */}
-                        {successResult && (
-                            <Alert variant="success">
-                                <CheckCircle2 className="h-4 w-4" />
-                                <AlertTitle>Archivo procesado exitosamente</AlertTitle>
-                                <AlertDescription>
-                                    <div className="mt-2 space-y-1 text-sm">
-                                        <p>
-                                            <span className="opacity-70">Lote:</span>{' '}
-                                            <span className="font-medium">{successResult.uuid}</span>
-                                        </p>
-                                        <p>
-                                            <span className="opacity-70">Total Facturas:</span>{' '}
-                                            <span className="font-medium">{successResult.total_invoices}</span>
-                                        </p>
-                                        <p>
-                                            <span className="opacity-70">Total Pagos:</span>{' '}
-                                            <span className="font-medium">{successResult.total_payments}</span>
-                                        </p>
-                                        <p>
-                                            <span className="opacity-70">Monto Total:</span>{' '}
-                                            <span className="font-medium">
-                                                ${formatCurrency(successResult.total_amount)}
-                                            </span>
-                                        </p>
-                                        <p>
-                                            <span className="opacity-70">Procesado:</span>{' '}
-                                            <span className="font-medium">{successResult.processed_at}</span>
-                                        </p>
-                                    </div>
-                                </AlertDescription>
-                            </Alert>
-                        )}
-
-                        {/* Error Alert */}
-                        {errors.length > 0 && (
-                            <Alert variant="destructive">
-                                <AlertCircle className="h-4 w-4" />
-                                <AlertTitle>
-                                    El archivo contiene {errors.length} error
-                                    {errors.length > 1 ? 'es' : ''} y no fue procesado
-                                </AlertTitle>
-                                <AlertDescription>
-                                    <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
-                                        {errors.slice(0, 10).map((error, index) => (
-                                            <p key={index} className="text-sm">
-                                                {error.row > 0 && (
-                                                    <strong>Fila {error.row}:</strong>
-                                                )}{' '}
-                                                {error.error}
-                                            </p>
-                                        ))}
-                                        {errors.length > 10 && (
-                                            <p className="text-sm italic">
-                                                ... y {errors.length - 10} errores más
-                                            </p>
-                                        )}
-                                    </div>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="mt-3"
-                                        onClick={handleDownloadErrors}
+                            <input
+                                ref={fileInputRef}
+                                id="file"
+                                type="file"
+                                accept=".xlsx,.xls"
+                                onChange={handleFileChange}
+                                disabled={!selectedBankAccount || isUploading}
+                                className="sr-only"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={!selectedBankAccount || isUploading}
+                                className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-dashed border-input bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <Upload className="h-4 w-4" />
+                                <span className="truncate">
+                                    {selectedFile
+                                        ? `${selectedFile.name} · ${formatFileSize(selectedFile.size)}`
+                                        : 'Seleccionar archivo Excel'}
+                                </span>
+                                {selectedFile && !isUploading ? (
+                                    <span
+                                        role="button"
+                                        aria-label="Remover archivo"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRemoveFile();
+                                        }}
+                                        className="ml-2 inline-flex items-center text-muted-foreground hover:text-foreground"
                                     >
-                                        <Download className="mr-2 h-4 w-4" />
-                                        Descargar log de errores
-                                    </Button>
-                                </AlertDescription>
-                            </Alert>
-                        )}
-                    </CardContent>
-                </Card>
+                                        <X className="h-3.5 w-3.5" />
+                                    </span>
+                                ) : null}
+                            </button>
+                            <p className="text-xs text-muted-foreground">
+                                Formatos soportados: Excel (.xlsx, .xls).
+                            </p>
+                            <div className="flex justify-end pt-1">
+                                <Button onClick={handleUpload} disabled={!canUpload}>
+                                    {isUploading ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                            Procesando...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Upload className="h-4 w-4" />
+                                            Cargar Excel
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                        </div>
+                    </FiltersCard>
+                    <InfoWidget
+                        title="Actividad"
+                        icon={Activity}
+                        footer="Lotes por día · últimas 13 semanas"
+                    >
+                        <ActivityHeatmap data={activityData} />
+                    </InfoWidget>
+                </div>
 
-                {/* Batches Section */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            Lotes de Pagos
+                {isUploading && (
+                    <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">{getStatusMessage()}</span>
+                            <span className="font-medium">{uploadProgress}%</span>
+                        </div>
+                        <Progress value={uploadProgress} className="h-2" />
+                    </div>
+                )}
+
+                {successResult && (
+                    <Alert variant="success">
+                        <CheckCircle2 className="h-4 w-4" />
+                        <AlertTitle>Archivo procesado exitosamente</AlertTitle>
+                        <AlertDescription>
+                            <div className="mt-2 space-y-1 text-sm">
+                                <p>
+                                    <span className="opacity-70">Lote:</span>{' '}
+                                    <span className="font-medium">{successResult.uuid}</span>
+                                </p>
+                                <p>
+                                    <span className="opacity-70">Total Facturas:</span>{' '}
+                                    <span className="font-medium">{successResult.total_invoices}</span>
+                                </p>
+                                <p>
+                                    <span className="opacity-70">Total Pagos:</span>{' '}
+                                    <span className="font-medium">{successResult.total_payments}</span>
+                                </p>
+                                <p>
+                                    <span className="opacity-70">Monto Total:</span>{' '}
+                                    <span className="font-medium">
+                                        ${formatCurrency(successResult.total_amount)}
+                                    </span>
+                                </p>
+                                <p>
+                                    <span className="opacity-70">Procesado:</span>{' '}
+                                    <span className="font-medium">{successResult.processed_at}</span>
+                                </p>
+                            </div>
+                        </AlertDescription>
+                    </Alert>
+                )}
+
+                {errors.length > 0 && (
+                    <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>
+                            El archivo contiene {errors.length} error
+                            {errors.length > 1 ? 'es' : ''} y no fue procesado
+                        </AlertTitle>
+                        <AlertDescription>
+                            <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+                                {errors.slice(0, 10).map((error, index) => (
+                                    <p key={index} className="text-sm">
+                                        {error.row > 0 && <strong>Fila {error.row}:</strong>}{' '}
+                                        {error.error}
+                                    </p>
+                                ))}
+                                {errors.length > 10 && (
+                                    <p className="text-sm italic">
+                                        ... y {errors.length - 10} errores más
+                                    </p>
+                                )}
+                            </div>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="mt-3"
+                                onClick={handleDownloadErrors}
+                            >
+                                <Download className="mr-2 h-4 w-4" />
+                                Descargar log de errores
+                            </Button>
+                        </AlertDescription>
+                    </Alert>
+                )}
+
+                <PageSection
+                    icon={ClipboardList}
+                    title="Lotes de Pagos"
+                    description="Historial de lotes procesados para la sucursal y cuenta seleccionadas."
+                    action={
+                        <div className="flex items-center gap-2">
                             {hasProcessingBatches && (
                                 <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
                             )}
-                        </CardTitle>
-                        <CardDescription>
-                            Historial de lotes procesados para la sucursal y cuenta seleccionadas
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {!selectedBranch || !selectedBankAccount ? (
+                            <ColumnVisibilityMenu
+                                columns={[
+                                    { key: 'archivo', label: 'Archivo' },
+                                    { key: 'fecha', label: 'Fecha' },
+                                    { key: 'estado', label: 'Estado' },
+                                    { key: 'facturas', label: 'Facturas' },
+                                    { key: 'pagos', label: 'Pagos' },
+                                    { key: 'monto', label: 'Monto Total' },
+                                ]}
+                                visibility={columnVisibility}
+                                onChange={(k, v) =>
+                                    setColumnVisibility((s) => ({ ...s, [k]: v }))
+                                }
+                            />
+                        </div>
+                    }
+                >
+                    {!selectedBranch || !selectedBankAccount ? (
                             <div className="flex items-center justify-center py-8 text-muted-foreground">
                                 <p>Selecciona sucursal y cuenta para ver lotes</p>
                             </div>
@@ -783,49 +794,77 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>UUID</TableHead>
-                                            <TableHead>Archivo</TableHead>
-                                            <TableHead>Fecha</TableHead>
-                                            <TableHead>Estado</TableHead>
-                                            <TableHead className="text-right">Facturas</TableHead>
-                                            <TableHead className="text-right">Pagos</TableHead>
-                                            <TableHead className="text-right">Monto Total</TableHead>
-                                            <TableHead className="text-right">Acciones</TableHead>
+                                <div className="overflow-hidden rounded-md border">
+                                <Table className="[&_td]:px-4 [&_th]:px-4">
+                                    <TableHeader className="bg-muted/50">
+                                        <TableRow className="hover:bg-muted/50">
+                                            <TableHead className="h-11 w-20 text-xs font-semibold uppercase tracking-wide text-muted-foreground">#</TableHead>
+                                            {columnVisibility.archivo && (
+                                                <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Archivo</TableHead>
+                                            )}
+                                            {columnVisibility.fecha && (
+                                                <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fecha</TableHead>
+                                            )}
+                                            {columnVisibility.estado && (
+                                                <TableHead className="h-11 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Estado</TableHead>
+                                            )}
+                                            {columnVisibility.facturas && (
+                                                <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Facturas</TableHead>
+                                            )}
+                                            {columnVisibility.pagos && (
+                                                <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pagos</TableHead>
+                                            )}
+                                            {columnVisibility.monto && (
+                                                <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Monto Total</TableHead>
+                                            )}
+                                            <TableHead className="h-11 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Acciones</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                         {batches.map((batch) => (
                                             <TableRow key={batch.id}>
-                                                <TableCell className="font-mono text-xs">
-                                                    {batch.uuid.substring(0, 8)}...
+                                                <TableCell className="py-3">
+                                                    <RowNumberBadge id={batch.id} />
                                                 </TableCell>
-                                                <TableCell className="max-w-[200px] truncate">
-                                                    {batch.filename}
-                                                </TableCell>
-                                                <TableCell>{formatDate(batch.created_at)}</TableCell>
-                                                <TableCell>
-                                                    <Badge
-                                                        variant={batch.status === 'failed' ? 'destructive' : 'default'}
-                                                        className={batch.status === 'processing' ? 'animate-pulse' : ''}
-                                                    >
-                                                        {batch.status === 'processing' && (
-                                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                                        )}
-                                                        {getStatusLabel(batch.status)}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    {batch.total_invoices}
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    {batch.total_payments}
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    ${formatCurrency(batch.total_amount)}
-                                                </TableCell>
+                                                {columnVisibility.archivo && (
+                                                    <TableCell className="max-w-[200px] truncate py-3">
+                                                        {batch.filename}
+                                                    </TableCell>
+                                                )}
+                                                {columnVisibility.fecha && (
+                                                    <TableCell className="py-3">
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <span className="cursor-default">
+                                                                    {formatDateShort(batch.created_at)}
+                                                                </span>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                {formatDate(batch.created_at)}
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </TableCell>
+                                                )}
+                                                {columnVisibility.estado && (
+                                                    <TableCell className="py-3">
+                                                        <BatchStatusBadge status={batch.status} />
+                                                    </TableCell>
+                                                )}
+                                                {columnVisibility.facturas && (
+                                                    <TableCell className="py-3 text-right tabular-nums">
+                                                        {batch.total_invoices}
+                                                    </TableCell>
+                                                )}
+                                                {columnVisibility.pagos && (
+                                                    <TableCell className="py-3 text-right tabular-nums">
+                                                        {batch.total_payments}
+                                                    </TableCell>
+                                                )}
+                                                {columnVisibility.monto && (
+                                                    <TableCell className="py-3 text-right tabular-nums">
+                                                        ${formatCurrency(batch.total_amount)}
+                                                    </TableCell>
+                                                )}
                                                 <TableCell className="text-right">
                                                     <div className="flex justify-end gap-2">
                                                         <Tooltip>
@@ -891,6 +930,7 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
                                         ))}
                                     </TableBody>
                                 </Table>
+                                </div>
 
                                 {/* Pagination */}
                                 {batchesPagination.lastPage > 1 && (
@@ -933,8 +973,7 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
                                 )}
                             </div>
                         )}
-                    </CardContent>
-                </Card>
+                </PageSection>
             </div>
 
             {/* Delete Confirmation Dialog */}
@@ -972,13 +1011,13 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
 
             {/* Batch Detail Modal */}
             <Dialog open={batchDetailOpen} onOpenChange={setBatchDetailOpen}>
-                <DialogContent className="!max-w-[90vw] !w-[1400px] max-h-[85vh] overflow-hidden flex flex-col">
+                <DialogContent className="flex max-h-[85vh] max-w-3xl flex-col overflow-hidden">
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-3">
-                            <FileSpreadsheet className="h-5 w-5" />
+                        <DialogTitle className="flex items-center gap-2 text-base">
+                            <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
                             Detalle del Lote
                         </DialogTitle>
-                        <DialogDescription>
+                        <DialogDescription className="font-mono text-xs">
                             {batchDetail?.filename || 'Cargando...'}
                         </DialogDescription>
                     </DialogHeader>
@@ -988,76 +1027,62 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
                             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                         </div>
                     ) : batchDetail ? (
-                        <div className="flex-1 overflow-y-auto space-y-6">
-                            {/* Batch Info */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                                <div className="space-y-1">
-                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">UUID</p>
-                                    <code className="text-sm bg-muted px-2 py-1 rounded block">
+                        <div className="flex-1 space-y-6 overflow-y-auto pr-1">
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                <InfoCell label="UUID">
+                                    <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
                                         {batchDetail.uuid.substring(0, 8)}
                                     </code>
-                                </div>
-                                <div className="space-y-1">
-                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Procesado</p>
-                                    <p className="font-medium">
-                                        {batchDetail.processed_at ? formatDate(batchDetail.processed_at) : '-'}
-                                    </p>
-                                </div>
-                                <div className="space-y-1">
-                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Sucursal</p>
-                                    <p className="font-medium">{batchDetail.branch?.name || '-'}</p>
-                                </div>
-                                <div className="space-y-1">
-                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Cuenta</p>
-                                    <p className="font-medium">{batchDetail.bank_account?.name || '-'}</p>
-                                </div>
+                                </InfoCell>
+                                <InfoCell label="Procesado">
+                                    <span className="tabular-nums">
+                                        {batchDetail.processed_at ? formatDate(batchDetail.processed_at) : '—'}
+                                    </span>
+                                </InfoCell>
+                                <InfoCell label="Sucursal">
+                                    <span className="block truncate">{batchDetail.branch?.name || '—'}</span>
+                                </InfoCell>
+                                <InfoCell label="Cuenta">
+                                    <span className="block truncate">{batchDetail.bank_account?.name || '—'}</span>
+                                </InfoCell>
                             </div>
 
-                            {/* Summary Cards */}
                             <div className="grid grid-cols-3 gap-3">
-                                <div className="bg-muted/50 rounded-lg p-3 text-center">
-                                    <p className="text-xl md:text-2xl font-bold">{batchDetail.total_invoices}</p>
-                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Facturas</p>
-                                </div>
-                                <div className="bg-blue-500/10 rounded-lg p-3 text-center">
-                                    <p className="text-xl md:text-2xl font-bold text-blue-500">{batchDetail.total_payments}</p>
-                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Pagos</p>
-                                </div>
-                                <div className="bg-green-500/10 rounded-lg p-3 text-center">
-                                    <p className="text-lg md:text-xl font-bold text-green-500 tabular-nums">
-                                        ${formatCurrency(batchDetail.total_amount)}
-                                    </p>
-                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Monto Total</p>
-                                </div>
+                                <StatCard icon={FileSpreadsheet} label="Facturas" value={batchDetail.total_invoices} />
+                                <StatCard icon={Play} label="Pagos" value={batchDetail.total_payments} tone="primary" />
+                                <StatCard icon={DollarSign} label="Monto Total" value={`$${formatCurrency(batchDetail.total_amount)}`} tone="success" />
                             </div>
 
-                            {/* Grouped by Vendor */}
                             <div>
-                                <h4 className="font-medium mb-3 text-sm uppercase tracking-wide text-muted-foreground">
+                                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                     Pagos por Proveedor ({groupedInvoices.length})
                                 </h4>
                                 <div className="space-y-2">
                                     {groupedInvoices.map((group) => (
-                                        <div key={group.card_code} className="border rounded-lg p-4">
-                                            <div className="flex items-center justify-between mb-2">
-                                                <div>
-                                                    <p className="font-medium">{group.card_code}</p>
-                                                    <p className="text-sm text-muted-foreground">{group.card_name}</p>
+                                        <div key={group.card_code} className="space-y-2 rounded-md border bg-card p-3">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium">{group.card_code}</p>
+                                                    <p className="truncate text-xs text-muted-foreground">{group.card_name}</p>
                                                 </div>
                                                 <div className="text-right">
-                                                    <p className="font-bold text-lg">${formatCurrency(group.total_amount)}</p>
+                                                    <p className="text-sm font-semibold tabular-nums">
+                                                        ${formatCurrency(group.total_amount)}
+                                                    </p>
                                                     <p className="text-xs text-muted-foreground">
                                                         {group.invoice_count} factura{group.invoice_count > 1 ? 's' : ''}
                                                     </p>
                                                 </div>
                                             </div>
                                             {group.sap_doc_num ? (
-                                                <Badge variant="default" className="text-xs">
-                                                    SAP Doc: {group.sap_doc_num}
+                                                <Badge variant="outline" className="rounded-full font-mono text-xs">
+                                                    SAP #{group.sap_doc_num}
                                                 </Badge>
                                             ) : group.has_error ? (
                                                 <div className="flex items-center gap-2">
-                                                    <Badge variant="destructive" className="text-xs">Error</Badge>
+                                                    <Badge className="rounded-full border-transparent bg-destructive/15 text-destructive">
+                                                        Error
+                                                    </Badge>
                                                     {batchDetail.status !== 'completed' && (
                                                         <Button
                                                             size="sm"
@@ -1067,12 +1092,12 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
                                                         >
                                                             {reprocessingCardCode === group.card_code ? (
                                                                 <>
-                                                                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                                                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                                                                     Reprocesando...
                                                                 </>
                                                             ) : (
                                                                 <>
-                                                                    <RefreshCw className="h-3 w-3 mr-1" />
+                                                                    <RefreshCw className="mr-1 h-3 w-3" />
                                                                     Reprocesar
                                                                 </>
                                                             )}
@@ -1080,10 +1105,12 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
                                                     )}
                                                 </div>
                                             ) : (
-                                                <Badge variant="secondary" className="text-xs">Pendiente</Badge>
+                                                <Badge className="rounded-full border-transparent bg-muted text-muted-foreground">
+                                                    Pendiente
+                                                </Badge>
                                             )}
                                             {group.error && (
-                                                <p className="text-xs text-destructive mt-2">{group.error}</p>
+                                                <p className="text-xs text-destructive">{group.error}</p>
                                             )}
                                         </div>
                                     ))}
@@ -1091,6 +1118,12 @@ export default function PagosSap({ branches, bankAccounts }: Props) {
                             </div>
                         </div>
                     ) : null}
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setBatchDetailOpen(false)}>
+                            Cerrar
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </AppLayout>

@@ -14,44 +14,28 @@ import { upload } from '@/routes/reconciliation';
 import { sap as pagosSap } from '@/routes/payments';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { Building2, ClipboardList, FileSearch, FileSpreadsheet, FileText, HandCoins, Landmark, LayoutGrid, Wallet } from 'lucide-react';
+import { ClipboardList, FileSearch, FileSpreadsheet, FileText, HandCoins, Landmark, LayoutGrid, Wallet } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const platformItems: NavItem[] = [
     {
-        title: 'Panel',
+        title: 'Manager Dashboard',
         href: dashboard(),
         icon: LayoutGrid,
     },
 ];
 
-const bankingItems: NavItem[] = [
+const cargasMasivasItems: NavItem[] = [
     {
         title: 'AC Tesorería',
         href: treasury(),
         icon: Landmark,
     },
     {
-        title: 'Integración Afirme',
-        href: afirme(),
-        icon: FileText,
-    },
-];
-
-const conciliacionItems: NavItem[] = [
-    {
         title: 'Carga de Extracto Bancario',
         href: upload(),
         icon: FileSpreadsheet,
     },
-    {
-        title: 'Validacion en Conciliacion',
-        href: '/reconciliation/validation',
-        icon: FileSearch,
-    },
-];
-
-const pagosItems: NavItem[] = [
     {
         title: 'Pagos a SAP',
         href: pagosSap(),
@@ -66,13 +50,21 @@ const pagosItems: NavItem[] = [
 
 const reportItems: NavItem[] = [
     {
+        title: 'Integración Afirme',
+        href: afirme(),
+        icon: FileText,
+    },
+    {
         title: 'Rastreo de Transacciones',
         href: '/reports/transactions',
         icon: ClipboardList,
     },
+    {
+        title: 'Validación en Conciliación',
+        href: '/reconciliation/validation',
+        icon: FileSearch,
+    },
 ];
-
-const intercompaniaItems: NavItem[] = [];
 
 export function AppSidebar() {
     return (
@@ -91,9 +83,7 @@ export function AppSidebar() {
 
             <SidebarContent>
                 <NavMain items={platformItems} label="Plataforma" />
-                <NavMain items={bankingItems} label="Opciones de bancos" />
-                <NavMain items={conciliacionItems} label="Conciliación Bancaria" />
-                <NavMain items={pagosItems} label="Pagos" />
+                <NavMain items={cargasMasivasItems} label="Cargas Masivas" />
                 <NavMain items={reportItems} label="Reportes" />
             </SidebarContent>
 

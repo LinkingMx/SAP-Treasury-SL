@@ -11,9 +11,10 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { FilterField, FiltersCard } from '@/components/page/filters-card';
+import { PageHeader } from '@/components/page/page-header';
+import { PageSection } from '@/components/page/page-section';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
     Select,
     SelectContent,
@@ -33,7 +34,7 @@ import AppLayout from '@/layouts/app-layout';
 import { afirme } from '@/routes';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { AlertCircle, CheckCircle2, Download, FileText, Loader2, Search } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Download, FileText, Filter, Loader2, Search } from 'lucide-react';
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -200,209 +201,189 @@ export default function AfirmeIndex({ branches }: Props) {
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Integración Afirme" />
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <FileText className="h-5 w-5" />
-                            Generador de archivo TXT para Afirme
-                        </CardTitle>
-                        <CardDescription>
-                            Consulta pagos pendientes de SAP y genera el archivo TXT para
-                            procesamiento bancario con Afirme
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                        {/* Filters Row */}
-                        <div className="grid gap-4 md:grid-cols-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="branch">Sucursal</Label>
-                                <Select value={selectedBranch} onValueChange={setSelectedBranch}>
-                                    <SelectTrigger id="branch">
-                                        <SelectValue placeholder="Selecciona una sucursal" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {branches.map((branch) => (
-                                            <SelectItem key={branch.id} value={String(branch.id)}>
-                                                {branch.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="dateFrom">Fecha Desde</Label>
-                                <Input
-                                    id="dateFrom"
-                                    type="date"
-                                    value={dateFrom}
-                                    onChange={(e) => setDateFrom(e.target.value)}
-                                />
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="dateTo">Fecha Hasta</Label>
-                                <Input
-                                    id="dateTo"
-                                    type="date"
-                                    value={dateTo}
-                                    onChange={(e) => setDateTo(e.target.value)}
-                                />
-                            </div>
-                            <div className="flex items-end">
-                                <Button onClick={handleSearch} disabled={!canSearch} className="w-full">
-                                    {isLoading ? (
-                                        <>
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                            Consultando...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Search className="h-4 w-4" />
-                                            Consultar
-                                        </>
-                                    )}
-                                </Button>
-                            </div>
+            <div className="space-y-6 p-4 md:p-6">
+                <PageHeader
+                    icon={FileText}
+                    title="Integración Afirme"
+                    description="Consulta pagos pendientes de SAP y genera el archivo TXT para procesamiento bancario con Afirme."
+                    action={
+                        <Button onClick={handleSearch} disabled={!canSearch}>
+                            {isLoading ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Consultando...
+                                </>
+                            ) : (
+                                <>
+                                    <Search className="h-4 w-4" />
+                                    Consultar
+                                </>
+                            )}
+                        </Button>
+                    }
+                />
+
+                <FiltersCard icon={Filter} columns={3}>
+                    <FilterField label="Sucursal" htmlFor="branch">
+                        <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+                            <SelectTrigger id="branch">
+                                <SelectValue placeholder="Selecciona una sucursal" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {branches.map((branch) => (
+                                    <SelectItem key={branch.id} value={String(branch.id)}>
+                                        {branch.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </FilterField>
+                    <FilterField label="Fecha Desde" htmlFor="dateFrom">
+                        <Input
+                            id="dateFrom"
+                            type="date"
+                            value={dateFrom}
+                            onChange={(e) => setDateFrom(e.target.value)}
+                        />
+                    </FilterField>
+                    <FilterField label="Fecha Hasta" htmlFor="dateTo">
+                        <Input
+                            id="dateTo"
+                            type="date"
+                            value={dateTo}
+                            onChange={(e) => setDateTo(e.target.value)}
+                        />
+                    </FilterField>
+                </FiltersCard>
+
+                {selectedBranchData && (
+                    <div className="rounded-lg bg-muted/50 p-3 text-sm">
+                        <span className="text-muted-foreground">Cuenta CLABE Afirme:</span>{' '}
+                        <span className="font-mono font-medium">
+                            {selectedBranchData.afirme_account}
+                        </span>
+                    </div>
+                )}
+
+                {error && (
+                    <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>Error</AlertTitle>
+                        <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                )}
+
+                {downloadSuccess && (
+                    <Alert variant="success">
+                        <CheckCircle2 className="h-4 w-4" />
+                        <AlertTitle>Archivo generado exitosamente</AlertTitle>
+                        <AlertDescription>
+                            El archivo TXT ha sido descargado y los pagos han sido marcados como
+                            procesados en SAP.
+                        </AlertDescription>
+                    </Alert>
+                )}
+
+                {summary && (
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="rounded-lg bg-blue-500/10 p-4 text-center">
+                            <p className="text-2xl font-bold text-blue-600">{summary.count}</p>
+                            <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                                Pagos Pendientes
+                            </p>
                         </div>
+                        <div className="rounded-lg bg-green-500/10 p-4 text-center">
+                            <p className="text-2xl font-bold text-green-600 tabular-nums">
+                                ${formatCurrency(summary.total_amount)}
+                            </p>
+                            <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                                Monto Total
+                            </p>
+                        </div>
+                    </div>
+                )}
 
-                        {/* Selected Branch Info */}
-                        {selectedBranchData && (
-                            <div className="rounded-lg bg-muted/50 p-3 text-sm">
-                                <span className="text-muted-foreground">Cuenta CLABE Afirme:</span>{' '}
-                                <span className="font-mono font-medium">
-                                    {selectedBranchData.afirme_account}
-                                </span>
-                            </div>
-                        )}
+                {payments.length > 0 && (
+                    <PageSection
+                        icon={FileText}
+                        title="Pagos a procesar"
+                        description="Verifica el detalle antes de generar el archivo TXT para Afirme."
+                        action={
+                            <Button
+                                onClick={() => setConfirmDialogOpen(true)}
+                                disabled={!canDownload}
+                            >
+                                {isDownloading ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Generando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Download className="h-4 w-4" />
+                                        Generar TXT
+                                    </>
+                                )}
+                            </Button>
+                        }
+                        contentClassName="p-0"
+                    >
+                        <div className="max-h-[400px] overflow-auto">
+                            <Table>
+                                <TableHeader className="sticky top-0 bg-background">
+                                    <TableRow>
+                                        <TableHead className="w-20"># Doc</TableHead>
+                                        <TableHead>Proveedor</TableHead>
+                                        <TableHead className="w-32">RFC</TableHead>
+                                        <TableHead className="w-44">CLABE</TableHead>
+                                        <TableHead className="w-28 text-right">Monto</TableHead>
+                                        <TableHead className="w-28">Fecha</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {payments.map((payment) => (
+                                        <TableRow key={payment.DocEntry}>
+                                            <TableCell className="font-mono text-xs">
+                                                {payment.DocNum}
+                                            </TableCell>
+                                            <TableCell className="max-w-[200px] truncate">
+                                                {payment.CardName}
+                                            </TableCell>
+                                            <TableCell className="font-mono text-xs">
+                                                {payment.rfc || '-'}
+                                            </TableCell>
+                                            <TableCell className="font-mono text-xs">
+                                                {payment.clabe || (
+                                                    <span className="text-destructive">SIN CLABE</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-right tabular-nums">
+                                                ${formatCurrency(payment.amount)}
+                                            </TableCell>
+                                            <TableCell className="text-xs">
+                                                {formatDate(payment.transfer_date)}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </PageSection>
+                )}
 
-                        {/* Error Alert */}
-                        {error && (
-                            <Alert variant="destructive">
-                                <AlertCircle className="h-4 w-4" />
-                                <AlertTitle>Error</AlertTitle>
-                                <AlertDescription>{error}</AlertDescription>
-                            </Alert>
-                        )}
+                {!isLoading && payments.length === 0 && summary === null && !error && (
+                    <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+                        <FileText className="mb-4 h-12 w-12 opacity-50" />
+                        <p>Selecciona una sucursal y rango de fechas para consultar pagos</p>
+                    </div>
+                )}
 
-                        {/* Success Alert */}
-                        {downloadSuccess && (
-                            <Alert variant="success">
-                                <CheckCircle2 className="h-4 w-4" />
-                                <AlertTitle>Archivo generado exitosamente</AlertTitle>
-                                <AlertDescription>
-                                    El archivo TXT ha sido descargado y los pagos han sido marcados
-                                    como procesados en SAP.
-                                </AlertDescription>
-                            </Alert>
-                        )}
-
-                        {/* Summary Cards */}
-                        {summary && (
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="rounded-lg bg-blue-500/10 p-4 text-center">
-                                    <p className="text-2xl font-bold text-blue-600">{summary.count}</p>
-                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                                        Pagos Pendientes
-                                    </p>
-                                </div>
-                                <div className="rounded-lg bg-green-500/10 p-4 text-center">
-                                    <p className="text-2xl font-bold text-green-600 tabular-nums">
-                                        ${formatCurrency(summary.total_amount)}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground uppercase tracking-wide">
-                                        Monto Total
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Payments Table */}
-                        {payments.length > 0 && (
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <h3 className="font-medium">Pagos a Procesar</h3>
-                                    <Button
-                                        onClick={() => setConfirmDialogOpen(true)}
-                                        disabled={!canDownload}
-                                    >
-                                        {isDownloading ? (
-                                            <>
-                                                <Loader2 className="h-4 w-4 animate-spin" />
-                                                Generando...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Download className="h-4 w-4" />
-                                                Generar TXT
-                                            </>
-                                        )}
-                                    </Button>
-                                </div>
-
-                                <div className="rounded-lg border">
-                                    <div className="max-h-[400px] overflow-auto">
-                                        <Table>
-                                            <TableHeader className="sticky top-0 bg-background">
-                                                <TableRow>
-                                                    <TableHead className="w-20"># Doc</TableHead>
-                                                    <TableHead>Proveedor</TableHead>
-                                                    <TableHead className="w-32">RFC</TableHead>
-                                                    <TableHead className="w-44">CLABE</TableHead>
-                                                    <TableHead className="w-28 text-right">Monto</TableHead>
-                                                    <TableHead className="w-28">Fecha</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {payments.map((payment) => (
-                                                    <TableRow key={payment.DocEntry}>
-                                                        <TableCell className="font-mono text-xs">
-                                                            {payment.DocNum}
-                                                        </TableCell>
-                                                        <TableCell className="max-w-[200px] truncate">
-                                                            {payment.CardName}
-                                                        </TableCell>
-                                                        <TableCell className="font-mono text-xs">
-                                                            {payment.rfc || '-'}
-                                                        </TableCell>
-                                                        <TableCell className="font-mono text-xs">
-                                                            {payment.clabe || (
-                                                                <span className="text-destructive">
-                                                                    SIN CLABE
-                                                                </span>
-                                                            )}
-                                                        </TableCell>
-                                                        <TableCell className="text-right tabular-nums">
-                                                            ${formatCurrency(payment.amount)}
-                                                        </TableCell>
-                                                        <TableCell className="text-xs">
-                                                            {formatDate(payment.transfer_date)}
-                                                        </TableCell>
-                                                    </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Empty State */}
-                        {!isLoading && payments.length === 0 && summary === null && !error && (
-                            <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-                                <FileText className="mb-4 h-12 w-12 opacity-50" />
-                                <p>Selecciona una sucursal y rango de fechas para consultar pagos</p>
-                            </div>
-                        )}
-
-                        {/* No Results */}
-                        {!isLoading && summary?.count === 0 && (
-                            <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-                                <CheckCircle2 className="mb-4 h-12 w-12 opacity-50" />
-                                <p>No hay pagos pendientes para el rango de fechas seleccionado</p>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
+                {!isLoading && summary?.count === 0 && (
+                    <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+                        <CheckCircle2 className="mb-4 h-12 w-12 opacity-50" />
+                        <p>No hay pagos pendientes para el rango de fechas seleccionado</p>
+                    </div>
+                )}
             </div>
 
             {/* Confirmation Dialog */}

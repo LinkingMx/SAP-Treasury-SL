@@ -3,7 +3,10 @@ import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { FilterField, FiltersCard } from '@/components/page/filters-card';
+import { InfoWidget } from '@/components/page/info-widget';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
@@ -46,6 +49,7 @@ import {
     Filter,
     Hash,
     Landmark,
+    ListChecks,
     Loader2,
     Plus,
     RefreshCw,
@@ -56,6 +60,39 @@ import {
     X,
     XCircle,
 } from 'lucide-react';
+
+const AI_STEP_DETAILS: { id: string; title: string; description: string }[] = [
+    {
+        id: 'load',
+        title: 'Carga del archivo',
+        description:
+            'Subes el extracto bancario. Se valida tamaño/extensión y se envía al servidor.',
+    },
+    {
+        id: 'analyze',
+        title: 'Análisis estructural con IA',
+        description:
+            'La IA detecta el formato del banco (Santander, Afirme, etc.) sin templates fijos.',
+    },
+    {
+        id: 'classify',
+        title: 'Clasificación inteligente',
+        description:
+            'Cada transacción se categoriza por descripción y monto contra cuentas SAP sugeridas.',
+    },
+    {
+        id: 'review',
+        title: 'Revisión manual',
+        description:
+            'Verificas las clasificaciones y ajustas las que no estén bien antes de guardar.',
+    },
+    {
+        id: 'save',
+        title: 'Creación del lote',
+        description:
+            'El lote queda en el tab Carga Rápida listo para procesar a SAP via Service Layer.',
+    },
+];
 
 type AiIngestStatus = 'idle' | 'analyzing' | 'classifying' | 'review' | 'saving' | 'complete' | 'error';
 
@@ -874,23 +911,20 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
 
     // Idle state - Form
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Bot className="h-5 w-5" />
-                    Ingesta Inteligente con IA
-                </CardTitle>
-                <CardDescription>
-                    Sube el archivo de estado de cuenta del banco. La IA detectara automaticamente el formato y clasificara las transacciones.
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {/* Branch and Account Selection */}
-                <div className="grid md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                        <Label>Sucursal</Label>
+        <div className="space-y-4">
+            {errorMessage && (
+                <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{errorMessage}</AlertDescription>
+                </Alert>
+            )}
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <FiltersCard icon={Filter} columns={3} className="lg:col-span-2">
+                    <FilterField label="Sucursal" htmlFor="ai-branch">
                         <Select value={selectedBranch} onValueChange={handleBranchChange}>
-                            <SelectTrigger>
+                            <SelectTrigger id="ai-branch">
                                 <SelectValue placeholder="Selecciona una sucursal" />
                             </SelectTrigger>
                             <SelectContent>
@@ -901,16 +935,15 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
                                 ))}
                             </SelectContent>
                         </Select>
-                    </div>
+                    </FilterField>
 
-                    <div className="space-y-2">
-                        <Label>Cuenta Bancaria</Label>
+                    <FilterField label="Cuenta Bancaria" htmlFor="ai-bank-account">
                         <Select
                             value={selectedBankAccount}
                             onValueChange={setSelectedBankAccount}
                             disabled={!selectedBranch}
                         >
-                            <SelectTrigger>
+                            <SelectTrigger id="ai-bank-account">
                                 <SelectValue placeholder="Selecciona una cuenta" />
                             </SelectTrigger>
                             <SelectContent>
@@ -921,12 +954,11 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
                                 ))}
                             </SelectContent>
                         </Select>
-                    </div>
+                    </FilterField>
 
-                    <div className="space-y-2">
-                        <Label>Banco (opcional)</Label>
+                    <FilterField label="Banco (opcional)" htmlFor="ai-bank">
                         <Select value={selectedBank} onValueChange={setSelectedBank}>
-                            <SelectTrigger>
+                            <SelectTrigger id="ai-bank">
                                 <SelectValue placeholder="Selecciona el banco" />
                             </SelectTrigger>
                             <SelectContent>
@@ -937,59 +969,84 @@ export default function AiIngest({ branches, bankAccounts, banks, onBatchSaved }
                                 ))}
                             </SelectContent>
                         </Select>
-                    </div>
-                </div>
+                    </FilterField>
 
-                {/* File Upload */}
-                <div className="space-y-2">
-                    <Label>Archivo del Banco</Label>
-                    <div className="flex items-center gap-2">
-                        <Input
+                    <div className="space-y-2 lg:col-span-3">
+                        <Label
+                            htmlFor="ai-file-input"
+                            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                        >
+                            Archivo del Banco
+                        </Label>
+                        <input
                             ref={fileInputRef}
                             type="file"
                             accept=".xlsx,.xls,.csv"
                             onChange={handleFileSelect}
-                            className="hidden"
+                            className="sr-only"
                             id="ai-file-input"
                         />
-                        <Button
-                            variant="outline"
+                        <button
+                            type="button"
                             onClick={() => fileInputRef.current?.click()}
-                            className="flex-1"
+                            className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-dashed border-input bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-muted/50"
                         >
-                            <Upload className="mr-2 h-4 w-4" />
-                            {selectedFile ? selectedFile.name : 'Seleccionar archivo Excel o CSV'}
-                        </Button>
-                        {selectedFile && (
-                            <Button variant="ghost" size="icon" onClick={handleClearFile}>
-                                <X className="h-4 w-4" />
+                            <Upload className="h-4 w-4" />
+                            <span className="truncate">
+                                {selectedFile
+                                    ? `${selectedFile.name} · ${(selectedFile.size / 1024).toFixed(1)} KB`
+                                    : 'Seleccionar archivo Excel o CSV'}
+                            </span>
+                            {selectedFile ? (
+                                <span
+                                    role="button"
+                                    aria-label="Remover archivo"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleClearFile();
+                                    }}
+                                    className="ml-2 inline-flex items-center text-muted-foreground hover:text-foreground"
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </span>
+                            ) : null}
+                        </button>
+                        <p className="text-xs text-muted-foreground">
+                            Formatos soportados: Excel (.xlsx, .xls) y CSV. Santander, Afirme y otros bancos.
+                        </p>
+                        <div className="flex justify-end pt-1">
+                            <Button onClick={startProcess} disabled={!canStartProcess}>
+                                <Sparkles className="h-4 w-4" />
+                                Analizar y Clasificar con IA
                             </Button>
-                        )}
+                        </div>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                        Formatos soportados: Excel (.xlsx, .xls) y CSV. Archivos de Santander, Afirme y otros bancos.
-                    </p>
-                </div>
+                </FiltersCard>
 
-                {/* Error message */}
-                {errorMessage && (
-                    <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>{errorMessage}</AlertDescription>
-                    </Alert>
-                )}
-
-                {/* Process Button */}
-                <Button
-                    onClick={startProcess}
-                    disabled={!canStartProcess}
-                    className="w-full"
-                    size="lg"
+                <InfoWidget
+                    title="Cómo funciona la IA"
+                    icon={ListChecks}
+                    footer="El análisis toma entre 20 y 90 segundos."
                 >
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Analizar y Clasificar con IA
-                </Button>
-            </CardContent>
-        </Card>
+                    <Accordion type="single" collapsible className="w-full">
+                        {AI_STEP_DETAILS.map((step, i) => (
+                            <AccordionItem key={step.id} value={step.id}>
+                                <AccordionTrigger className="py-2.5 hover:no-underline">
+                                    <div className="flex items-center gap-2.5">
+                                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold tabular-nums text-muted-foreground">
+                                            {i + 1}
+                                        </span>
+                                        <span className="text-sm font-medium">{step.title}</span>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="pl-7 text-xs text-muted-foreground">
+                                    {step.description}
+                                </AccordionContent>
+                            </AccordionItem>
+                        ))}
+                    </Accordion>
+                </InfoWidget>
+            </div>
+        </div>
     );
 }

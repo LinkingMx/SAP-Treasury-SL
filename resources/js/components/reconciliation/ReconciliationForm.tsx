@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
@@ -12,7 +12,10 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { FilterField, FiltersCard } from '@/components/page/filters-card';
+import { InfoWidget } from '@/components/page/info-widget';
 import {
     type BankAccount,
     type Branch,
@@ -20,16 +23,12 @@ import {
 } from '@/types';
 import {
     AlertCircle,
-    Building2,
-    Calendar,
     CheckCircle2,
     Circle,
-    DollarSign,
-    FileSpreadsheet,
-    Landmark,
+    Filter,
+    ListChecks,
     Loader2,
     Search,
-    Sparkles,
     Upload,
     X,
 } from 'lucide-react';
@@ -50,11 +49,38 @@ const INITIAL_STEPS: ProcessStep[] = [
     { id: 'analyze', label: 'Analizando estructura del archivo...', status: 'pending' },
     { id: 'parse', label: 'Parseando movimientos del extracto...', status: 'pending' },
     { id: 'sap', label: 'Consultando movimientos en SAP...', status: 'pending' },
-    { id: 'reconcile', label: 'Ejecutando conciliacion...', status: 'pending' },
-    { id: 'done', label: 'Conciliacion completada', status: 'pending' },
+    { id: 'reconcile', label: 'Ejecutando conciliación...', status: 'pending' },
+    { id: 'done', label: 'Conciliación completada', status: 'pending' },
 ];
 
 const STEP_DELAY_MS = 400;
+
+const STEP_DETAILS: { id: string; title: string; description: string }[] = [
+    {
+        id: 'analyze',
+        title: 'Análisis del archivo',
+        description:
+            'Se inspecciona la estructura del Excel/CSV para detectar columnas (fecha, descripción, cargo, abono) y rango de movimientos.',
+    },
+    {
+        id: 'parse',
+        title: 'Parseo de movimientos',
+        description:
+            'Cada fila del extracto se convierte a un movimiento normalizado, descartando filas vacías y registrando errores de formato.',
+    },
+    {
+        id: 'sap',
+        title: 'Consulta a SAP',
+        description:
+            'Se piden a SAP Business One los movimientos contables de la cuenta seleccionada para el rango de fechas indicado.',
+    },
+    {
+        id: 'reconcile',
+        title: 'Conciliación',
+        description:
+            'Se cruzan extracto y SAP por fecha + monto + referencia. El resultado incluye matches exactos, parciales y partidas no conciliadas.',
+    },
+];
 
 interface Props {
     branches: Branch[];
@@ -62,7 +88,6 @@ interface Props {
 }
 
 export default function ReconciliationForm({ branches, bankAccounts }: Props) {
-    // Selection state
     const [selectedBranch, setSelectedBranch] = useState<string>('');
     const [selectedBankAccount, setSelectedBankAccount] = useState<string>('');
     const [dateFrom, setDateFrom] = useState<string>('');
@@ -72,18 +97,14 @@ export default function ReconciliationForm({ branches, bankAccounts }: Props) {
     const [manualOpeningBalance, setManualOpeningBalance] = useState<string>('');
     const [manualClosingBalance, setManualClosingBalance] = useState<string>('');
 
-    // Processing state
     const [status, setStatus] = useState<ValidationStatus>('idle');
     const [progress, setProgress] = useState(0);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-    // Process steps state
     const [steps, setSteps] = useState<ProcessStep[]>(INITIAL_STEPS);
 
-    // Result state
     const [result, setResult] = useState<ReconciliationResult | null>(null);
 
-    // Filter accounts by branch
     const filteredBankAccounts = useMemo(() => {
         if (!selectedBranch) return [];
         return bankAccounts.filter(
@@ -159,7 +180,6 @@ export default function ReconciliationForm({ branches, bankAccounts }: Props) {
         resetSteps();
 
         try {
-            // Step 1: Analyzing file structure
             updateStep(0, 'active');
             setProgress(5);
             await delay(STEP_DELAY_MS);
@@ -183,7 +203,6 @@ export default function ReconciliationForm({ branches, bankAccounts }: Props) {
                 throw new Error('Error al conectar con el servidor.');
             }
 
-            // Read NDJSON stream
             const reader = response.body!.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
@@ -222,14 +241,12 @@ export default function ReconciliationForm({ branches, bankAccounts }: Props) {
             }
 
             if (!finalData) {
-                throw new Error('No se recibio respuesta del servidor.');
+                throw new Error('No se recibió respuesta del servidor.');
             }
 
-            // Attach manual balances
             finalData.manual_opening_balance = manualOpeningBalance ? parseFloat(manualOpeningBalance) : null;
             finalData.manual_closing_balance = manualClosingBalance ? parseFloat(manualClosingBalance) : null;
 
-            // Complete
             updateStep(4, 'complete');
             setProgress(100);
             setResult(finalData);
@@ -246,17 +263,15 @@ export default function ReconciliationForm({ branches, bankAccounts }: Props) {
         const stepIndex = event.step - 1;
         if (stepIndex < 0 || stepIndex >= INITIAL_STEPS.length) return;
 
-        // Mark previous steps as complete
         for (let i = 0; i < stepIndex; i++) {
             updateStep(i, 'complete');
         }
 
-        // Mark current step as active
         updateStep(stepIndex, 'active', event.detail);
         setProgress(Math.round((stepIndex / INITIAL_STEPS.length) * 90) + 10);
     };
 
-    // Render complete state - show report
+    // Complete — delegate to report
     if (status === 'complete' && result) {
         return (
             <ReconciliationReport
@@ -267,33 +282,33 @@ export default function ReconciliationForm({ branches, bankAccounts }: Props) {
         );
     }
 
-    // Render processing state
+    // Processing state
     if (status === 'processing') {
         return (
             <Card>
-                <CardContent className="pt-6">
-                    <div className="flex flex-col items-center justify-center space-y-6 py-8">
-                        <div className="relative">
-                            <Sparkles className="h-12 w-12 animate-pulse text-primary" />
-                        </div>
-                        <h3 className="text-lg font-semibold">Ejecutando conciliacion...</h3>
+                <CardContent className="py-10">
+                    <div className="mx-auto flex max-w-md flex-col items-center gap-6">
+                        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                        <h3 className="text-lg font-semibold">Ejecutando conciliación...</h3>
 
-                        {/* Steps indicator */}
-                        <div className="w-full max-w-md space-y-3">
+                        <div className="w-full space-y-2">
                             {steps.map((step) => (
-                                <div key={step.id} className="flex items-start gap-3">
+                                <div
+                                    key={step.id}
+                                    className="flex items-start gap-3 rounded-md bg-muted/40 px-3 py-2"
+                                >
                                     <div className="mt-0.5">
                                         {step.status === 'complete' && (
-                                            <CheckCircle2 className="h-5 w-5 shrink-0 text-green-500" />
+                                            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
                                         )}
                                         {step.status === 'active' && (
-                                            <Loader2 className="h-5 w-5 shrink-0 animate-spin text-primary" />
+                                            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
                                         )}
                                         {step.status === 'error' && (
-                                            <AlertCircle className="h-5 w-5 shrink-0 text-red-500" />
+                                            <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
                                         )}
                                         {step.status === 'pending' && (
-                                            <Circle className="h-5 w-5 shrink-0 text-muted-foreground/50" />
+                                            <Circle className="h-4 w-4 shrink-0 text-muted-foreground/40" />
                                         )}
                                     </div>
                                     <div className="min-w-0 flex-1">
@@ -302,7 +317,7 @@ export default function ReconciliationForm({ branches, bankAccounts }: Props) {
                                                 'text-sm',
                                                 step.status === 'active' && 'font-medium text-foreground',
                                                 step.status === 'complete' && 'text-muted-foreground',
-                                                step.status === 'error' && 'text-red-500',
+                                                step.status === 'error' && 'text-destructive',
                                                 step.status === 'pending' && 'text-muted-foreground/50',
                                             )}
                                         >
@@ -318,17 +333,21 @@ export default function ReconciliationForm({ branches, bankAccounts }: Props) {
                             ))}
                         </div>
 
-                        <Progress value={progress} className="w-full max-w-md" />
-                        <p className="text-sm text-muted-foreground">{progress}% completado</p>
+                        <div className="w-full space-y-1.5">
+                            <Progress value={progress} className="h-1.5" />
+                            <p className="text-right text-xs tabular-nums text-muted-foreground">
+                                {progress}% completado
+                            </p>
+                        </div>
                     </div>
                 </CardContent>
             </Card>
         );
     }
 
+    // Idle — form
     return (
         <div className="space-y-4">
-            {/* Error alert */}
             {errorMessage && (
                 <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
@@ -337,187 +356,167 @@ export default function ReconciliationForm({ branches, bankAccounts }: Props) {
                 </Alert>
             )}
 
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Search className="h-5 w-5" />
-                        Parametros de Validacion
-                    </CardTitle>
-                    <CardDescription>
-                        Selecciona la sucursal, cuenta bancaria, rango de fechas y sube el extracto bancario para ejecutar la conciliacion.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                    {/* Row 1: Branch and Bank Account */}
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <div className="space-y-2">
-                            <Label htmlFor="branch">
-                                <Building2 className="mr-1 inline h-4 w-4" />
-                                Sucursal
-                            </Label>
-                            <Select value={selectedBranch} onValueChange={handleBranchChange}>
-                                <SelectTrigger id="branch">
-                                    <SelectValue placeholder="Selecciona una sucursal" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {branches.map((branch) => (
-                                        <SelectItem key={branch.id} value={String(branch.id)}>
-                                            {branch.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <FiltersCard icon={Filter} columns={2} className="lg:col-span-2">
+                    <FilterField label="Sucursal" htmlFor="branch">
+                        <Select value={selectedBranch} onValueChange={handleBranchChange}>
+                            <SelectTrigger id="branch">
+                                <SelectValue placeholder="Selecciona una sucursal" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {branches.map((branch) => (
+                                    <SelectItem key={branch.id} value={String(branch.id)}>
+                                        {branch.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </FilterField>
 
-                        <div className="space-y-2">
-                            <Label htmlFor="bank-account">
-                                <Landmark className="mr-1 inline h-4 w-4" />
-                                Cuenta Bancaria
-                            </Label>
-                            <Select
-                                value={selectedBankAccount}
-                                onValueChange={setSelectedBankAccount}
-                                disabled={!selectedBranch}
-                            >
-                                <SelectTrigger id="bank-account">
-                                    <SelectValue placeholder={
+                    <FilterField label="Cuenta Bancaria" htmlFor="bank-account">
+                        <Select
+                            value={selectedBankAccount}
+                            onValueChange={setSelectedBankAccount}
+                            disabled={!selectedBranch}
+                        >
+                            <SelectTrigger id="bank-account">
+                                <SelectValue
+                                    placeholder={
                                         !selectedBranch
                                             ? 'Primero selecciona una sucursal'
                                             : filteredBankAccounts.length === 0
                                               ? 'No hay cuentas disponibles'
                                               : 'Selecciona una cuenta bancaria'
-                                    } />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {filteredBankAccounts.map((account) => (
-                                        <SelectItem key={account.id} value={String(account.id)}>
-                                            {account.name} ({account.account})
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
+                                    }
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {filteredBankAccounts.map((account) => (
+                                    <SelectItem key={account.id} value={String(account.id)}>
+                                        {account.name} ({account.account})
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </FilterField>
 
-                    {/* Row 2: Date range */}
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <div className="space-y-2">
-                            <Label htmlFor="date-from">
-                                <Calendar className="mr-1 inline h-4 w-4" />
-                                Fecha Desde
-                            </Label>
-                            <Input
-                                id="date-from"
-                                type="date"
-                                value={dateFrom}
-                                onChange={(e) => setDateFrom(e.target.value)}
-                                placeholder="2025-01-01"
-                            />
-                        </div>
+                    <FilterField label="Fecha Desde" htmlFor="date-from">
+                        <Input
+                            id="date-from"
+                            type="date"
+                            value={dateFrom}
+                            onChange={(e) => setDateFrom(e.target.value)}
+                        />
+                    </FilterField>
 
-                        <div className="space-y-2">
-                            <Label htmlFor="date-to">
-                                <Calendar className="mr-1 inline h-4 w-4" />
-                                Fecha Hasta
-                            </Label>
-                            <Input
-                                id="date-to"
-                                type="date"
-                                value={dateTo}
-                                onChange={(e) => setDateTo(e.target.value)}
-                                placeholder="2025-01-31"
-                            />
-                        </div>
-                    </div>
+                    <FilterField label="Fecha Hasta" htmlFor="date-to">
+                        <Input
+                            id="date-to"
+                            type="date"
+                            value={dateTo}
+                            onChange={(e) => setDateTo(e.target.value)}
+                        />
+                    </FilterField>
 
-                    {/* Row 3: Manual balances (optional) */}
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <div className="space-y-2">
-                            <Label htmlFor="opening-balance">
-                                <DollarSign className="mr-1 inline h-4 w-4" />
-                                Saldo Inicial (Extracto Bancario)
-                            </Label>
-                            <Input
-                                id="opening-balance"
-                                type="number"
-                                step="0.01"
-                                value={manualOpeningBalance}
-                                onChange={(e) => setManualOpeningBalance(e.target.value)}
-                                placeholder="Opcional - ej: 5,454,702.84"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="closing-balance">
-                                <DollarSign className="mr-1 inline h-4 w-4" />
-                                Saldo Final (Extracto Bancario)
-                            </Label>
-                            <Input
-                                id="closing-balance"
-                                type="number"
-                                step="0.01"
-                                value={manualClosingBalance}
-                                onChange={(e) => setManualClosingBalance(e.target.value)}
-                                placeholder="Opcional - ej: 4,834,119.47"
-                            />
-                        </div>
-                    </div>
+                    <FilterField label="Saldo Inicial (opcional)" htmlFor="opening-balance">
+                        <Input
+                            id="opening-balance"
+                            type="number"
+                            step="0.01"
+                            value={manualOpeningBalance}
+                            onChange={(e) => setManualOpeningBalance(e.target.value)}
+                            placeholder="ej: 5,454,702.84"
+                        />
+                    </FilterField>
 
-                    {/* Row 4: File upload */}
-                    <div className="space-y-2">
-                        <Label htmlFor="file">
-                            <FileSpreadsheet className="mr-1 inline h-4 w-4" />
+                    <FilterField label="Saldo Final (opcional)" htmlFor="closing-balance">
+                        <Input
+                            id="closing-balance"
+                            type="number"
+                            step="0.01"
+                            value={manualClosingBalance}
+                            onChange={(e) => setManualClosingBalance(e.target.value)}
+                            placeholder="ej: 4,834,119.47"
+                        />
+                    </FilterField>
+
+                    <div className="space-y-2 md:col-span-2">
+                        <Label
+                            htmlFor="file"
+                            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                        >
                             Archivo de Extracto Bancario
                         </Label>
-                        {selectedFile ? (
-                            <div className="flex items-center gap-2 rounded-lg border bg-muted/50 p-3">
-                                <FileSpreadsheet className="h-5 w-5 text-primary" />
-                                <span className="flex-1 truncate text-sm">{selectedFile.name}</span>
-                                <span className="text-xs text-muted-foreground">
-                                    {(selectedFile.size / 1024).toFixed(1)} KB
-                                </span>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6"
-                                    onClick={handleClearFile}
-                                >
-                                    <X className="h-4 w-4" />
-                                </Button>
-                            </div>
-                        ) : (
-                            <div
-                                className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 transition-colors hover:border-primary/50 hover:bg-muted/50"
-                                onClick={() => fileInputRef.current?.click()}
-                            >
-                                <Upload className="h-8 w-8 text-muted-foreground" />
-                                <p className="text-sm text-muted-foreground">
-                                    Haz clic para seleccionar un archivo .xlsx, .xls o .csv
-                                </p>
-                            </div>
-                        )}
                         <input
                             ref={fileInputRef}
                             id="file"
                             type="file"
-                            className="hidden"
                             accept=".xlsx,.xls,.csv"
+                            className="sr-only"
                             onChange={handleFileSelect}
                         />
+                        <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-dashed border-input bg-background px-3 text-sm text-muted-foreground transition-colors hover:bg-muted/50"
+                        >
+                            <Upload className="h-4 w-4" />
+                            <span className="truncate">
+                                {selectedFile
+                                    ? `${selectedFile.name} · ${(selectedFile.size / 1024).toFixed(1)} KB`
+                                    : 'Seleccionar archivo Excel o CSV'}
+                            </span>
+                            {selectedFile ? (
+                                <span
+                                    role="button"
+                                    aria-label="Remover archivo"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleClearFile();
+                                    }}
+                                    className="ml-2 inline-flex items-center text-muted-foreground hover:text-foreground"
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </span>
+                            ) : null}
+                        </button>
+                        <p className="text-xs text-muted-foreground">
+                            Formatos soportados: Excel (.xlsx, .xls) y CSV.
+                        </p>
                     </div>
 
-                    {/* Submit button */}
-                    <div className="flex justify-end">
-                        <Button
-                            onClick={handleSubmit}
-                            disabled={!canStartProcess}
-                            className="gap-2"
-                        >
+                    <div className="flex justify-end pt-1 md:col-span-2">
+                        <Button onClick={handleSubmit} disabled={!canStartProcess}>
                             <Search className="h-4 w-4" />
-                            Validar Conciliacion
+                            Validar Conciliación
                         </Button>
                     </div>
-                </CardContent>
-            </Card>
+                </FiltersCard>
+
+                <InfoWidget
+                    title="Qué pasará al validar"
+                    icon={ListChecks}
+                    footer="El proceso toma entre 5 y 30 segundos."
+                >
+                    <Accordion type="single" collapsible className="w-full">
+                        {STEP_DETAILS.map((step, i) => (
+                            <AccordionItem key={step.id} value={step.id}>
+                                <AccordionTrigger className="py-2.5 hover:no-underline">
+                                    <div className="flex items-center gap-2.5">
+                                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold tabular-nums text-muted-foreground">
+                                            {i + 1}
+                                        </span>
+                                        <span className="text-sm font-medium">{step.title}</span>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="pl-7 text-xs text-muted-foreground">
+                                    {step.description}
+                                </AccordionContent>
+                            </AccordionItem>
+                        ))}
+                    </Accordion>
+                </InfoWidget>
+            </div>
         </div>
     );
 }

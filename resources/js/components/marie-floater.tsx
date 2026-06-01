@@ -3,10 +3,7 @@ import { usePage } from '@inertiajs/react';
 import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-const TARGET_EMAILS = [
-    'andrea.cardenas@grupocosteno.com',
-    'armando.reyes@grupocosteno.com',
-];
+const TARGET_EMAILS = ['andrea.cardenas@grupocosteno.com'];
 const STORAGE_KEY = 'marie-floater-dismissed';
 
 export function MarieFloater() {

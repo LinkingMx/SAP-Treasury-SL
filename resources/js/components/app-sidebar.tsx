@@ -46,10 +46,18 @@ const cargasMasivasItems: NavItem[] = [
         href: '/payments/customers',
         icon: HandCoins,
     },
+];
+
+const cuentasComercioItems: NavItem[] = [
     {
         title: 'Estados de Adquirente',
         href: '/treasury/settlements',
         icon: ReceiptText,
+    },
+    {
+        title: 'Pagos Parrot',
+        href: '/treasury/parrot-payments',
+        icon: Receipt,
     },
 ];
 
@@ -68,11 +76,6 @@ const reportItems: NavItem[] = [
         title: 'Validación en Conciliación',
         href: '/reconciliation/validation',
         icon: FileSearch,
-    },
-    {
-        title: 'Pagos Parrot',
-        href: '/treasury/parrot-payments',
-        icon: Receipt,
     },
 ];
 
@@ -94,6 +97,7 @@ export function AppSidebar() {
             <SidebarContent>
                 <NavMain items={platformItems} label="Plataforma" />
                 <NavMain items={cargasMasivasItems} label="Cargas Masivas" />
+                <NavMain items={cuentasComercioItems} label="Cuentas Comercio" />
                 <NavMain items={reportItems} label="Reportes" />
             </SidebarContent>
 

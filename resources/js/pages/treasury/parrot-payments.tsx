@@ -10,7 +10,7 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import { cn } from '@/lib/utils';
-import { Banknote, Bike, CheckCircle2, Coins, CreditCard, Filter, type LucideIcon, Receipt, Search, Truck, Wallet } from 'lucide-react';
+import { Banknote, Bike, CheckCircle2, Coins, CreditCard, Filter, Loader2, type LucideIcon, Receipt, Save, Search, Truck, Wallet } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -42,6 +42,17 @@ interface DataResponse {
     window: { from: string; to: string };
     totals: { count: number; sum_amount: number; sum_tip: number; sum_total: number };
     by_payment_type: PaymentTypeTotal[];
+    reconciliation: Record<string, AcquirerRecon>;
+}
+
+interface AcquirerRecon {
+    name: string;
+    settlements: number;
+    saved: number;
+    proposed: number;
+    matched: number;
+    orphans: number;
+    pending: number;
 }
 
 interface Props {
@@ -86,6 +97,7 @@ export default function ParrotPayments({ branches }: Props) {
     const [dateFrom, setDateFrom] = useState(defaultRange.from);
     const [dateTo, setDateTo] = useState(defaultRange.to);
     const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
     const [result, setResult] = useState<DataResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
 
@@ -113,6 +125,33 @@ export default function ParrotPayments({ branches }: Props) {
             setError('Error de red al consultar el API de pagos.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSave = async () => {
+        if (!branchId) return;
+        setSaving(true);
+        setError(null);
+        try {
+            const res = await fetch('/treasury/parrot-payments/reconcile', {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || '',
+                },
+                body: JSON.stringify({ branch_id: branchId, date_from: dateFrom, date_to: dateTo }),
+            });
+            const json = await res.json();
+            if (res.ok && json.success) {
+                await handleConsultar();
+            } else {
+                setError(json.error ?? 'No se pudo guardar la conciliación.');
+            }
+        } catch {
+            setError('Error de red al guardar la conciliación.');
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -222,6 +261,42 @@ export default function ParrotPayments({ branches }: Props) {
                                     );
                                 })}
                             </div>
+
+                            {(() => {
+                                const rec = Object.values(result.reconciliation ?? {});
+                                if (rec.length === 0) return null;
+                                const sum = (k: 'settlements' | 'matched' | 'saved' | 'proposed' | 'pending') =>
+                                    rec.reduce((a, r) => a + r[k], 0);
+                                const settlements = sum('settlements');
+                                const matched = sum('matched');
+                                const saved = sum('saved');
+                                const proposed = sum('proposed');
+                                const pending = sum('pending');
+
+                                return (
+                                    <div className="flex flex-col gap-2 rounded-md border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <p className="text-sm text-muted-foreground">
+                                            Conciliación:{' '}
+                                            <span className="font-medium tabular-nums text-foreground">
+                                                {formatInt(matched)}/{formatInt(settlements)}
+                                            </span>{' '}
+                                            · Guardados <span className="tabular-nums">{formatInt(saved)}</span> · Sin guardar{' '}
+                                            <span className="tabular-nums">{formatInt(proposed)}</span> · Pendientes{' '}
+                                            <span className="tabular-nums">{formatInt(pending)}</span>
+                                        </p>
+                                        {proposed > 0 ? (
+                                            <Button onClick={handleSave} disabled={saving}>
+                                                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                                {saving ? 'Guardando…' : `Conciliar y guardar (${formatInt(proposed)})`}
+                                            </Button>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400">
+                                                <CheckCircle2 className="h-4 w-4" /> Todo guardado
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                         </div>
                     )}
                 </PageSection>

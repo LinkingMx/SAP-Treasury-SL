@@ -97,6 +97,42 @@ class ParrotPaymentsController extends Controller
     }
 
     /**
+     * Persist the conciliation: match the loaded settlements against the gCore
+     * payments and write the new links into payment_orders (idempotent).
+     */
+    public function reconcile(ParrotPaymentsDataRequest $request): JsonResponse
+    {
+        $branch = Branch::findOrFail($request->integer('branch_id'));
+
+        if (empty($branch->payment_branch)) {
+            return response()->json([
+                'success' => false,
+                'error' => "La sucursal «{$branch->name}» no tiene configurado el campo «Sucursal en API de Pagos» (payment_branch).",
+            ], 422);
+        }
+
+        $from = $request->date('date_from')->format('Y-m-d');
+        $to = $request->date('date_to')->format('Y-m-d');
+
+        [$windowFrom, $windowTo] = GcorePaymentsService::businessDayWindow($from, $to);
+        $result = $this->gcore->allParrotOrderPayments($branch->payment_branch, $windowFrom, $windowTo);
+
+        if (! $result['success']) {
+            return response()->json(['success' => false, 'error' => $result['error']], 502);
+        }
+
+        $persisted = $this->reconciler->persist($branch->id, $from, $to, $result['data'], $request->user()->id);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Conciliación guardada: {$persisted['saved']} nuevas ({$persisted['already']} ya estaban).",
+            'saved' => $persisted['saved'],
+            'already' => $persisted['already'],
+            'total_matched' => $persisted['total_matched'],
+        ]);
+    }
+
+    /**
      * Aggregate CHARGED payments by payment_type_name.
      *
      * @param  array<int, array<string, mixed>>  $rows

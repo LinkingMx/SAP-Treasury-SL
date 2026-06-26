@@ -3,6 +3,7 @@
 use App\Models\Acquirer;
 use App\Models\Branch;
 use App\Models\ExternalSettlement;
+use App\Models\PaymentOrder;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 
@@ -156,6 +157,42 @@ it('annotates payment-type cards with conciliation when settlements are loaded',
         ->and($rappi['matched_count'])->toBe(1)
         ->and((float) $rappi['reconciled_pct'])->toBe(100.0)
         ->and($json['reconciliation']['RAPPI']['matched'])->toBe(1);
+});
+
+it('persists the conciliation via the reconcile endpoint (idempotent)', function () {
+    fakeParrot([p('Rappi', 100, 0)]);
+
+    $acquirer = Acquirer::factory()->delivery('Rappi')->create(['code' => 'RAPPI', 'name' => 'Rappi']);
+    $branch = Branch::factory()->create(['payment_branch' => 'Ryoshi Polanco']);
+    $user = ownerOf($branch);
+
+    ExternalSettlement::factory()->create([
+        'acquirer_id' => $acquirer->id,
+        'branch_id' => $branch->id,
+        'transaction_date' => '2026-05-15',
+        'transaction_time' => '12:00:00',
+        'amount' => 100.00,
+        'status' => 'pending_review',
+        'authorization' => null,
+        'reference' => 'ORD-9',
+    ]);
+
+    $payload = ['branch_id' => $branch->id, 'date_from' => '2026-05-01', 'date_to' => '2026-05-31'];
+
+    $this->actingAs($user)->postJson(route('parrot-payments.reconcile'), $payload)
+        ->assertSuccessful()
+        ->assertJsonPath('saved', 1);
+
+    expect(PaymentOrder::count())->toBe(1)
+        ->and(PaymentOrder::first()->external_reference)->toBe('ORD-9');
+
+    // Second run saves nothing new.
+    $this->actingAs($user)->postJson(route('parrot-payments.reconcile'), $payload)
+        ->assertSuccessful()
+        ->assertJsonPath('saved', 0)
+        ->assertJsonPath('already', 1);
+
+    expect(PaymentOrder::count())->toBe(1);
 });
 
 it('renders the page for an authenticated user', function () {

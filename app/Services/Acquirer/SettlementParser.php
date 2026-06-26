@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Reader\IReadFilter;
 
 /**
  * Deterministic (no-AI) reader/parser for acquirer settlement files. Reads the
@@ -45,27 +46,18 @@ class SettlementParser
 
     /**
      * Read the first rows of a file as a matrix so the UI can build a mapping.
+     * Only the first $maxRows rows are loaded (memory-safe on large files).
      *
      * @return array{rows: array<int, array<int, string>>, header_row: int, delimiter: string}
      */
     public function readHeaders(UploadedFile $file, int $maxRows = 12): array
     {
-        $text = $this->readFileAsText($file);
-        $lines = array_slice(explode("\n", $text), 0, $maxRows);
-        $delimiter = $this->detectDelimiter($file, $lines);
-
-        $rows = [];
-        foreach ($lines as $line) {
-            $rows[] = array_map(
-                static fn ($cell): string => trim((string) $cell),
-                $this->splitLine(rtrim($line, "\r"), $delimiter),
-            );
-        }
+        $rows = $this->readMatrix($file, $maxRows);
 
         return [
             'rows' => $rows,
             'header_row' => $this->detectHeaderRow($rows),
-            'delimiter' => $delimiter,
+            'delimiter' => $this->delimiterFor($file),
         ];
     }
 
@@ -122,7 +114,7 @@ class SettlementParser
     /**
      * Extract every settlement row using a manual column mapping (parse_config).
      *
-     * @param  array{header_lines_count?: int, delimiter?: string, columns: array<string, array{index?: int, format?: string}>}  $parseConfig
+     * @param  array{header_lines_count?: int, columns: array<string, array{index?: int, format?: string}>}  $parseConfig
      * @return array<int, array<string, mixed>>
      */
     public function parseRows(UploadedFile $file, array $parseConfig): array
@@ -137,23 +129,15 @@ class SettlementParser
             throw new \RuntimeException('El mapeo debe incluir al menos la fecha y el monto.');
         }
 
-        $rawContent = $this->readFileAsText($file);
-        $lines = explode("\n", $rawContent);
+        $matrix = $this->readMatrix($file);
         $headerLinesCount = (int) ($parseConfig['header_lines_count'] ?? 0);
-        $delimiter = $parseConfig['delimiter'] ?? "\t";
-        if ($delimiter === '\t') {
-            $delimiter = "\t";
-        }
 
         $rows = [];
 
-        foreach (array_slice($lines, $headerLinesCount) as $line) {
-            $line = rtrim($line, "\r");
-            if (trim($line) === '') {
+        foreach (array_slice($matrix, $headerLinesCount) as $fields) {
+            if (trim(implode('', $fields)) === '') {
                 continue;
             }
-
-            $fields = $this->splitLine($line, $delimiter);
 
             if (! isset($fields[$dateIndex])) {
                 continue;
@@ -196,6 +180,80 @@ class SettlementParser
     }
 
     /**
+     * Read a spreadsheet/CSV into a 2D string matrix. Reads data only (no styles)
+     * and, when $maxRows is set, only the first rows — so large files don't
+     * exhaust memory. Excel date serials stay numeric and are resolved by parseDate.
+     *
+     * @return array<int, array<int, string>>
+     */
+    private function readMatrix(UploadedFile $file, ?int $maxRows = null): array
+    {
+        $extension = strtolower($file->getClientOriginalExtension());
+
+        if (in_array($extension, ['xlsx', 'xls'], true)) {
+            $reader = IOFactory::createReaderForFile($file->getPathname());
+            $reader->setReadDataOnly(true);
+
+            if ($maxRows !== null) {
+                $reader->setReadFilter(new class($maxRows) implements IReadFilter
+                {
+                    public function __construct(private int $maxRows) {}
+
+                    public function readCell($columnAddress, $row, $worksheetName = ''): bool
+                    {
+                        return $row <= $this->maxRows;
+                    }
+                });
+            }
+
+            $data = $reader->load($file->getPathname())->getActiveSheet()->toArray(null, false, false, false);
+
+            return array_map(
+                static fn ($row): array => array_map(static fn ($cell): string => trim((string) ($cell ?? '')), (array) $row),
+                $data,
+            );
+        }
+
+        $lines = [];
+        $handle = fopen($file->getPathname(), 'r');
+        if ($handle === false) {
+            return [];
+        }
+        while (($line = fgets($handle)) !== false) {
+            $lines[] = rtrim($line, "\r\n");
+            if ($maxRows !== null && count($lines) >= $maxRows) {
+                break;
+            }
+        }
+        fclose($handle);
+
+        $delimiter = $this->detectDelimiter($lines);
+
+        return array_map(
+            fn (string $line): array => array_map(static fn ($cell): string => trim((string) $cell), $this->splitLine($line, $delimiter)),
+            $lines,
+        );
+    }
+
+    /**
+     * The delimiter to report for a file (tab for spreadsheets, detected for CSV).
+     */
+    private function delimiterFor(UploadedFile $file): string
+    {
+        if (in_array(strtolower($file->getClientOriginalExtension()), ['xlsx', 'xls'], true)) {
+            return "\t";
+        }
+
+        $handle = fopen($file->getPathname(), 'r');
+        $first = $handle ? rtrim((string) fgets($handle), "\r\n") : '';
+        if ($handle) {
+            fclose($handle);
+        }
+
+        return $this->detectDelimiter([$first]);
+    }
+
+    /**
      * Normalize a header for matching: lowercase, trimmed, accents stripped.
      */
     private function normalize(string $value): string
@@ -206,20 +264,16 @@ class SettlementParser
     }
 
     /**
-     * Detect the delimiter: tab for spreadsheets, best-fit for CSV.
+     * Detect the best-fit CSV delimiter from sample lines.
      *
      * @param  array<int, string>  $lines
      */
-    private function detectDelimiter(UploadedFile $file, array $lines): string
+    private function detectDelimiter(array $lines): string
     {
-        if (in_array(strtolower($file->getClientOriginalExtension()), ['xlsx', 'xls'], true)) {
-            return "\t";
-        }
-
         $firstNonEmpty = '';
         foreach ($lines as $line) {
             if (trim($line) !== '') {
-                $firstNonEmpty = rtrim($line, "\r");
+                $firstNonEmpty = $line;
 
                 break;
             }
@@ -342,45 +396,5 @@ class SettlementParser
         } catch (\Exception $e) {
             return null;
         }
-    }
-
-    /**
-     * Read any file as plain text. Excel → tab-separated, CSV → as-is.
-     */
-    private function readFileAsText(UploadedFile $file): string
-    {
-        $extension = strtolower($file->getClientOriginalExtension());
-
-        if (in_array($extension, ['xlsx', 'xls'], true)) {
-            $spreadsheet = IOFactory::load($file->getPathname());
-            $sheet = $spreadsheet->getActiveSheet();
-            $data = $sheet->toArray(null, true, false);
-
-            $lines = [];
-            foreach ($data as $rowIndex => $row) {
-                $cellValues = [];
-                foreach ($row as $colIndex => $value) {
-                    if (is_numeric($value) && (float) $value >= 36526 && (float) $value <= 73415) {
-                        $coord = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex + 1).($rowIndex + 1);
-                        $cell = $sheet->getCell($coord);
-                        if (\PhpOffice\PhpSpreadsheet\Shared\Date::isDateTime($cell)) {
-                            try {
-                                $cellValues[] = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float) $value)->format('d/m/Y');
-
-                                continue;
-                            } catch (\Exception $e) {
-                                // Fall through to raw value.
-                            }
-                        }
-                    }
-                    $cellValues[] = (string) ($value ?? '');
-                }
-                $lines[] = implode("\t", $cellValues);
-            }
-
-            return implode("\n", $lines);
-        }
-
-        return file_get_contents($file->getPathname());
     }
 }

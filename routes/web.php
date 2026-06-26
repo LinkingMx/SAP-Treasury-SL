@@ -140,6 +140,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // gCore — Pagos Parrot POS por adquirente/sucursal
     Route::get('gcore/branches/{branch}/parrot-order-payments', [App\Http\Controllers\GcorePaymentsController::class, 'parrotOrderPayments'])
         ->name('gcore.parrot-order-payments');
+
+    // Conciliación de pagos por adquirente
+    Route::prefix('treasury/settlements')->name('settlements.')->group(function () {
+        Route::post('analyze', [App\Http\Controllers\SettlementIngestController::class, 'analyze'])->name('analyze');
+        Route::post('preview', [App\Http\Controllers\SettlementIngestController::class, 'preview'])->name('preview');
+        Route::post('/', [App\Http\Controllers\SettlementIngestController::class, 'store'])->name('store');
+        Route::get('{upload}', [App\Http\Controllers\SettlementIngestController::class, 'show'])->name('show');
+    });
 });
 
 require __DIR__.'/settings.php';

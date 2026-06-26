@@ -55,7 +55,7 @@ const cuentasComercioItems: NavItem[] = [
         icon: ReceiptText,
     },
     {
-        title: 'Pagos Parrot',
+        title: 'Conciliación Cuentas Comercio',
         href: '/treasury/parrot-payments',
         icon: Receipt,
     },

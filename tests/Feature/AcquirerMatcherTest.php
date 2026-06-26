@@ -91,6 +91,13 @@ it('matches by restaurant business day (5am cutoff) when enabled', function () {
     expect((new AcquirerMatcher)->match($rows, $payments, $rule, [], 5)[0]->matched())->toBeTrue();
 });
 
+it('does not match a refund (negative amount) to a positive payment', function () use ($cardRule) {
+    $row = settlementRow(['amount' => -555.50]);
+    $results = (new AcquirerMatcher)->match([$row], [payment(['total' => 555.50])], $cardRule());
+
+    expect($results[0]->matched())->toBeFalse();
+});
+
 it('buckets candidates by day: same amount on different days matches its own day', function () use ($cardRule) {
     // Three identical-amount payments on three days; each settlement must match
     // the payment of its own day (day bucketing preserves the correct pairing).

@@ -179,7 +179,9 @@ class SettlementParser
             $rows[] = [
                 'transaction_date' => $date,
                 'transaction_time' => $this->parseTime($timeSource),
-                'amount' => abs($amount),
+                // Keep the sign: a refund (DEVOLUCION) stays negative so it does
+                // not inflate totals or steal a positive sale's match.
+                'amount' => $amount,
                 'card_type' => $this->valueAt($fields, $columns, 'card_type'),
                 'card_brand' => $this->valueAt($fields, $columns, 'card_brand'),
                 'authorization' => $this->valueAt($fields, $columns, 'authorization'),

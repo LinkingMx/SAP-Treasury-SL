@@ -56,6 +56,25 @@ it('parses rows with a manual column mapping (cleans amount, DD/MM date)', funct
         ->and($rows[1]['amount'])->toBe(200.0);
 });
 
+it('preserves the sign of refunds (DEVOLUCION) instead of taking abs', function () {
+    $content = "Fecha,Monto,Op\n03/04/2026,555.50,VENTA\n03/04/2026,-555.50,DEVOLUCION\n03/04/2026,(200.00),DEVOLUCION\n";
+    $file = UploadedFile::fake()->createWithContent('mifel.csv', $content);
+
+    $rows = (new SettlementParser)->parseRows($file, [
+        'columns' => [
+            'transaction_date' => ['index' => 0, 'format' => 'DD/MM/YYYY'],
+            'amount' => ['index' => 1],
+            'operation_type' => ['index' => 2],
+        ],
+        'header_lines_count' => 1,
+    ]);
+
+    expect($rows)->toHaveCount(3)
+        ->and($rows[0]['amount'])->toBe(555.5)
+        ->and($rows[1]['amount'])->toBe(-555.5)
+        ->and($rows[2]['amount'])->toBe(-200.0);
+});
+
 it('throws when date or amount is not mapped', function () {
     expect(fn () => (new SettlementParser)->parseRows(parserCsv(), ['columns' => ['amount' => ['index' => 2]]]))
         ->toThrow(RuntimeException::class);

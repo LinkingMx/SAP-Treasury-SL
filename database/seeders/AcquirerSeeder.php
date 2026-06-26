@@ -47,7 +47,9 @@ class AcquirerSeeder extends Seeder
                         'reference' => ['header' => 'ID de la órden'],
                         'status' => ['header' => 'Estado de la órden'],
                     ],
-                    'header_row' => 1,
+                    // The subtotal row (a formula-only row) is dropped under
+                    // readDataOnly, so headers land on matrix row 0.
+                    'header_row' => 0,
                     'delimiter' => "\t",
                 ],
             ],

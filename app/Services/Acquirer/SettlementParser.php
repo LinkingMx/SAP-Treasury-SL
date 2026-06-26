@@ -212,6 +212,11 @@ class SettlementParser
         $extension = strtolower($file->getClientOriginalExtension());
 
         if (in_array($extension, ['xlsx', 'xls'], true)) {
+            // PhpSpreadsheet is memory-hungry; the web pool defaults to 128M.
+            if ($this->memoryLimitBytes() < 512 * 1024 * 1024) {
+                @ini_set('memory_limit', '512M');
+            }
+
             $reader = IOFactory::createReaderForFile($file->getPathname());
             $reader->setReadDataOnly(true);
 
@@ -254,6 +259,27 @@ class SettlementParser
             fn (string $line): array => array_map(static fn ($cell): string => trim((string) $cell), $this->splitLine($line, $delimiter)),
             $lines,
         );
+    }
+
+    /**
+     * Current PHP memory_limit in bytes (-1/unlimited returns PHP_INT_MAX).
+     */
+    private function memoryLimitBytes(): int
+    {
+        $raw = trim((string) ini_get('memory_limit'));
+
+        if ($raw === '' || $raw === '-1') {
+            return PHP_INT_MAX;
+        }
+
+        $value = (int) $raw;
+
+        return match (strtolower(substr($raw, -1))) {
+            'g' => $value * 1024 * 1024 * 1024,
+            'm' => $value * 1024 * 1024,
+            'k' => $value * 1024,
+            default => $value,
+        };
     }
 
     /**

@@ -25,6 +25,7 @@ class Acquirer extends Model
         'amount_tolerance',
         'time_window_seconds',
         'active',
+        'column_map',
     ];
 
     /**
@@ -39,6 +40,7 @@ class Acquirer extends Model
             'amount_tolerance' => 'decimal:2',
             'time_window_seconds' => 'integer',
             'active' => 'boolean',
+            'column_map' => 'array',
         ];
     }
 

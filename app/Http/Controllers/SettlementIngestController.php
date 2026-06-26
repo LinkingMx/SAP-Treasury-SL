@@ -3,28 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Enums\SettlementUploadStatus;
+use App\Http\Requests\SettlementHeadersRequest;
 use App\Http\Requests\SettlementIngestRequest;
-use App\Http\Requests\SettlementUploadRequest;
 use App\Models\Acquirer;
-use App\Models\Branch;
 use App\Models\ExternalSettlement;
-use App\Models\PaymentOrder;
 use App\Models\SettlementUpload;
-use App\Services\Acquirer\AcquirerMatcher;
 use App\Services\Acquirer\SettlementIngestService;
-use App\Services\Ai\SettlementLayoutAnalyzer;
-use App\Services\GcorePaymentsService;
+use App\Services\Acquirer\SettlementParser;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class SettlementIngestController extends Controller
 {
     public function __construct(
-        protected SettlementLayoutAnalyzer $analyzer,
-        protected GcorePaymentsService $gcore,
-        protected AcquirerMatcher $matcher,
+        protected SettlementParser $parser,
         protected SettlementIngestService $ingest,
     ) {}
 
@@ -52,102 +45,38 @@ class SettlementIngestController extends Controller
     }
 
     /**
-     * Detect the column layout of an uploaded settlement file (no persistence).
+     * Read the first rows of an uploaded file so the user can map the columns.
+     * Suggests a mapping from the acquirer's saved column_map, then from aliases.
      */
-    public function analyze(Request $request): JsonResponse
+    public function headers(SettlementHeadersRequest $request): JsonResponse
     {
-        $request->validate([
-            'file' => ['required', 'file', 'extensions:xlsx,xls,csv', 'max:40960'],
-        ]);
+        $read = $this->parser->readHeaders($request->file('file'));
 
-        $analysis = $this->analyzer->analyze($request->file('file'));
+        $savedMap = $request->filled('acquirer_id')
+            ? Acquirer::find($request->integer('acquirer_id'))?->column_map
+            : null;
+
+        $headerRow = $read['rows'][$read['header_row']] ?? [];
 
         return response()->json([
             'success' => true,
-            'parse_config' => $analysis['parse_config'],
-            'acquirer_guess' => $analysis['acquirer_guess'],
-            'fingerprint' => $analysis['fingerprint'],
+            'rows' => $read['rows'],
+            'header_row' => $read['header_row'],
+            'delimiter' => $read['delimiter'],
+            'headers' => $headerRow,
+            'suggested_mapping' => $this->parser->suggestMapping($headerRow, $savedMap),
         ]);
     }
 
     /**
-     * Dry-run reconciliation: parse the file, pull payments, and show the
-     * proposed matches without writing anything.
-     */
-    public function preview(SettlementUploadRequest $request): JsonResponse
-    {
-        $acquirer = Acquirer::findOrFail($request->integer('acquirer_id'));
-        $branch = Branch::findOrFail($request->integer('branch_id'));
-
-        if (empty($branch->payment_branch)) {
-            return response()->json([
-                'success' => false,
-                'error' => "La sucursal «{$branch->name}» no tiene configurado el campo «Sucursal en API de Pagos» (payment_branch).",
-            ], 422);
-        }
-
-        $analysis = $this->analyzer->analyze($request->file('file'));
-        $rows = $this->analyzer->parseRows($request->file('file'), $analysis['parse_config']);
-
-        $payments = $this->gcore->allParrotOrderPayments(
-            $branch->payment_branch,
-            $request->date('period_start')->format('Y-m-d'),
-            $request->date('period_end')->format('Y-m-d'),
-            ['status' => 'CHARGED'],
-        );
-
-        if (! $payments['success']) {
-            return response()->json([
-                'success' => false,
-                'error' => $payments['error'],
-            ], 502);
-        }
-
-        $excluded = PaymentOrder::query()
-            ->where('branch_id', $branch->id)
-            ->pluck('parrot_payment_id')
-            ->map(fn ($id): int => (int) $id)
-            ->all();
-
-        $results = $this->matcher->match($rows, $payments['data'], $acquirer->matchRule(), $excluded);
-
-        $matched = array_filter($results, fn ($r): bool => $r->matched());
-        $proposed = array_map(function ($result) use ($rows) {
-            $row = $rows[$result->rowIndex];
-
-            return [
-                'row_index' => $result->rowIndex,
-                'transaction_date' => $row['transaction_date'],
-                'amount' => $row['amount'],
-                'authorization' => $row['authorization'] ?? null,
-                'matched' => $result->matched(),
-                'parrot_payment_id' => $result->parrotPaymentId,
-                'payment_total' => $result->paymentTotal,
-                'match_diff' => $result->diff,
-                'match_method' => $result->method,
-            ];
-        }, $results);
-
-        return response()->json([
-            'success' => true,
-            'acquirer_guess' => $analysis['acquirer_guess'],
-            'summary' => [
-                'total_rows' => count($rows),
-                'matched_rows' => count($matched),
-                'unmatched_rows' => count($rows) - count($matched),
-                'payments_fetched' => count($payments['data']),
-            ],
-            'proposed' => $proposed,
-        ]);
-    }
-
-    /**
-     * Upload an acquirer settlement file and dedup-ingest its rows. Synchronous:
-     * accumulates into external_settlements, skipping rows that already exist.
+     * Upload an acquirer settlement file and dedup-ingest its rows using the
+     * user-supplied column mapping. Synchronous: accumulates into
+     * external_settlements, skipping rows that already exist. No matching.
      */
     public function store(SettlementIngestRequest $request): JsonResponse
     {
         $file = $request->file('file');
+        $parseConfig = $request->input('parse_config');
         $path = $file->store('settlements/'.date('Y/m'), 'local');
 
         $upload = SettlementUpload::create([
@@ -156,11 +85,12 @@ class SettlementIngestController extends Controller
             'user_id' => $request->user()->id,
             'original_name' => $file->getClientOriginalName(),
             'stored_path' => $path,
+            'parse_config' => $parseConfig,
             'status' => SettlementUploadStatus::Parsing,
         ]);
 
         try {
-            $result = $this->ingest->ingestFromFile($upload, $file);
+            $result = $this->ingest->ingestFromFile($upload, $file, $parseConfig);
         } catch (\Throwable $e) {
             $upload->update(['status' => SettlementUploadStatus::Failed, 'error_log' => $e->getMessage()]);
 
@@ -168,6 +98,10 @@ class SettlementIngestController extends Controller
                 'success' => false,
                 'error' => 'No se pudo procesar el archivo: '.$e->getMessage(),
             ], 422);
+        }
+
+        if ($request->boolean('remember')) {
+            $this->rememberMapping($request->integer('acquirer_id'), $parseConfig);
         }
 
         $sample = $upload->externalSettlements()
@@ -205,6 +139,33 @@ class SettlementIngestController extends Controller
         return response()->json([
             'success' => true,
             'upload' => $this->uploadPayload($upload),
+        ]);
+    }
+
+    /**
+     * Persist the column mapping (by header name) on the acquirer so the next
+     * upload of the same acquirer pre-fills it.
+     *
+     * @param  array<string, mixed>  $parseConfig
+     */
+    protected function rememberMapping(int $acquirerId, array $parseConfig): void
+    {
+        $columns = [];
+        foreach (($parseConfig['columns'] ?? []) as $field => $spec) {
+            if (! is_array($spec) || ! isset($spec['header'])) {
+                continue;
+            }
+            $columns[$field] = array_filter(
+                ['header' => $spec['header'], 'format' => $spec['format'] ?? null],
+                static fn ($value): bool => $value !== null,
+            );
+        }
+
+        Acquirer::whereKey($acquirerId)->update([
+            'column_map' => [
+                'columns' => $columns,
+                'delimiter' => $parseConfig['delimiter'] ?? null,
+            ],
         ]);
     }
 

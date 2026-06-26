@@ -5,35 +5,42 @@ namespace App\Services\Acquirer;
 use App\Enums\SettlementUploadStatus;
 use App\Models\ExternalSettlement;
 use App\Models\SettlementUpload;
-use App\Services\Ai\SettlementLayoutAnalyzer;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 /**
  * Ingests acquirer settlement files into external_settlements, accumulating
- * across uploads and deduplicating per row. Does NOT match against gCore — that
- * is a separate reconciliation step.
+ * across uploads and deduplicating per row. Parses with a manual column mapping
+ * (parse_config). Does NOT match against gCore — that is a separate step.
  */
 final class SettlementIngestService
 {
-    public function __construct(private SettlementLayoutAnalyzer $analyzer) {}
+    public function __construct(private SettlementParser $parser) {}
 
     /**
-     * Read the stored file with AI column detection, then ingest. For the job.
+     * Read the stored file using the upload's saved parse_config, then ingest.
+     * For the queued job path.
      */
     public function ingestUpload(SettlementUpload $upload): IngestResult
     {
-        return $this->ingestFromFile($upload, $this->resolveStoredFile($upload));
+        $parseConfig = $upload->parse_config;
+
+        if (empty($parseConfig)) {
+            throw new \RuntimeException('La carga no tiene un mapeo de columnas (parse_config).');
+        }
+
+        return $this->ingestFromFile($upload, $this->resolveStoredFile($upload), $parseConfig);
     }
 
     /**
-     * Detect columns with AI, parse the rows, then dedup-insert them.
+     * Parse the rows with the given column mapping, then dedup-insert them.
+     *
+     * @param  array<string, mixed>  $parseConfig
      */
-    public function ingestFromFile(SettlementUpload $upload, UploadedFile $file): IngestResult
+    public function ingestFromFile(SettlementUpload $upload, UploadedFile $file, array $parseConfig): IngestResult
     {
-        $analysis = $this->analyzer->analyze($file);
-        $rows = $this->analyzer->parseRows($file, $analysis['parse_config']);
+        $rows = $this->parser->parseRows($file, $parseConfig);
 
         return $this->ingestRows($upload, $rows);
     }

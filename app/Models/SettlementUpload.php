@@ -26,6 +26,7 @@ class SettlementUpload extends Model
         'user_id',
         'original_name',
         'stored_path',
+        'parse_config',
         'period_start',
         'period_end',
         'status',
@@ -45,6 +46,7 @@ class SettlementUpload extends Model
     protected function casts(): array
     {
         return [
+            'parse_config' => 'array',
             'period_start' => 'date',
             'period_end' => 'date',
             'status' => SettlementUploadStatus::class,

@@ -26,8 +26,22 @@ final class AcquirerMatcher
         $used = array_fill_keys($excludePaymentIds, true);
         $results = [];
 
+        // Bucket payments by day so each settlement only scans its own day's
+        // candidates: O(n·m) → O(n·k). Critical for card volumes (3k+ rows).
+        $paymentsByDay = [];
+        foreach ($apiPayments as $payment) {
+            $day = $businessDayStartHour === null
+                ? substr((string) ($payment['created_at_pos'] ?? ''), 0, 10)
+                : $this->businessDay((string) ($payment['created_at_pos'] ?? ''), $businessDayStartHour);
+            $paymentsByDay[$day][] = $payment;
+        }
+
         foreach ($settlementRows as $index => $row) {
-            $best = $this->findBest($row, $apiPayments, $rule, $used, $businessDayStartHour);
+            $rowDay = $businessDayStartHour === null
+                ? $row['transaction_date']
+                : $this->businessDay($row['transaction_date'].' '.($row['transaction_time'] ?? '00:00:00'), $businessDayStartHour);
+
+            $best = $this->findBest($row, $paymentsByDay[$rowDay] ?? [], $rule, $used, $businessDayStartHour);
 
             if ($best === null) {
                 $results[] = new MatchResult($index, null, null, null, null, null);

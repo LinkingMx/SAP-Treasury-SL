@@ -91,6 +91,27 @@ it('matches by restaurant business day (5am cutoff) when enabled', function () {
     expect((new AcquirerMatcher)->match($rows, $payments, $rule, [], 5)[0]->matched())->toBeTrue();
 });
 
+it('buckets candidates by day: same amount on different days matches its own day', function () use ($cardRule) {
+    // Three identical-amount payments on three days; each settlement must match
+    // the payment of its own day (day bucketing preserves the correct pairing).
+    $payments = [
+        payment(['id' => 1, 'created_at_pos' => '2026-05-15T12:00:00-06:00']),
+        payment(['id' => 2, 'created_at_pos' => '2026-05-16T12:00:00-06:00']),
+        payment(['id' => 3, 'created_at_pos' => '2026-05-17T12:00:00-06:00']),
+    ];
+    $rows = [
+        settlementRow(['transaction_date' => '2026-05-17']),
+        settlementRow(['transaction_date' => '2026-05-15']),
+        settlementRow(['transaction_date' => '2026-05-16']),
+    ];
+
+    $results = (new AcquirerMatcher)->match($rows, $payments, $cardRule());
+
+    expect($results[0]->parrotPaymentId)->toBe(3)
+        ->and($results[1]->parrotPaymentId)->toBe(1)
+        ->and($results[2]->parrotPaymentId)->toBe(2);
+});
+
 it('honours the time window when configured', function () use ($cardRule) {
     $payments = [payment(['created_at_pos' => '2026-05-15T12:40:00-06:00'])]; // 40 min away
 

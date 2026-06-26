@@ -141,6 +141,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('gcore/branches/{branch}/parrot-order-payments', [App\Http\Controllers\GcorePaymentsController::class, 'parrotOrderPayments'])
         ->name('gcore.parrot-order-payments');
 
+    // Pagos Parrot (gCore) — totales por tipo de pago
+    Route::get('treasury/parrot-payments', [App\Http\Controllers\ParrotPaymentsController::class, 'index'])->name('parrot-payments');
+    Route::get('treasury/parrot-payments/data', [App\Http\Controllers\ParrotPaymentsController::class, 'data'])->name('parrot-payments.data');
+
     // Conciliación de pagos por adquirente
     Route::prefix('treasury/settlements')->name('settlements.')->group(function () {
         Route::post('analyze', [App\Http\Controllers\SettlementIngestController::class, 'analyze'])->name('analyze');

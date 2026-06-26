@@ -41,6 +41,13 @@ class BranchesTable
                     ->placeholder('—')
                     ->toggleable(isToggledHiddenByDefault: true),
 
+                TextColumn::make('payment_branch')
+                    ->label('Sucursal Pagos (gCore)')
+                    ->searchable()
+                    ->sortable()
+                    ->placeholder('—')
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 TextColumn::make('created_at')
                     ->label('Creado')
                     ->dateTime('d/m/Y H:i')

@@ -57,6 +57,13 @@ class BranchForm
                             ->maxLength(18)
                             ->regex('/^\d{18}$/')
                             ->helperText('Cuenta CLABE de 18 dígitos para transferencias Afirme.'),
+
+                        TextInput::make('payment_branch')
+                            ->label('Sucursal en API de Pagos')
+                            ->prefixIcon(Heroicon::OutlinedBanknotes)
+                            ->placeholder('MOCHOMOS_POLANCO')
+                            ->maxLength(255)
+                            ->helperText('Nombre con el que se consulta esta sucursal en el API de pagos de gCore.'),
                     ])
                     ->columns(2),
             ]);

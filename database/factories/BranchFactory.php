@@ -22,6 +22,7 @@ class BranchFactory extends Factory
             'sap_branch_id' => fake()->numberBetween(1, 100),
             'ceco' => 'CC-'.fake()->numerify('###'),
             'afirme_account' => fake()->numerify('##################'),
+            'payment_branch' => fake()->optional()->regexify('[A-Z]{4,10}_[A-Z]{4,10}'),
         ];
     }
 }

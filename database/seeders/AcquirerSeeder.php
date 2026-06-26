@@ -82,6 +82,21 @@ class AcquirerSeeder extends Seeder
                 'parrot_payment_type_names' => ['Uber Eats'],
                 'amount_tolerance' => 0.50,
                 'time_window_seconds' => null,
+                // Default mapping for the Uber Eats export. Date+time both come from
+                // the "Hora del pedido del cliente" datetime serial; amount is the
+                // gross "Valor del recibo". The order-code header is double-encoded
+                // (mojibake) in Uber's file, so it's stored verbatim to match.
+                'column_map' => [
+                    'columns' => [
+                        'transaction_date' => ['header' => 'Hora del pedido del cliente', 'format' => 'DD/MM/YYYY'],
+                        'transaction_time' => ['header' => 'Hora del pedido del cliente'],
+                        'amount' => ['header' => 'Valor del recibo'],
+                        'reference' => ['header' => 'CÃ³digo del pedido'],
+                        'status' => ['header' => 'Estado del pedido'],
+                    ],
+                    'header_row' => 0,
+                    'delimiter' => "\t",
+                ],
             ],
         ];
 

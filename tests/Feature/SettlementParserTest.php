@@ -101,3 +101,25 @@ it('parses separate date + 12-hour time columns (MIFEL)', function () {
         ->and($rows[0]['amount'])->toBe(28498.15)
         ->and($rows[0]['authorization'])->toBe('803478');
 });
+
+it('parses an Excel datetime serial for both date and time (Uber Eats)', function () {
+    // 46140.602685185 = 2026-04-28 14:27:52 (date + fractional time in one serial).
+    $content = "Hora,Valor,Codigo\n46140.602685185,514,01B02\n";
+    $file = UploadedFile::fake()->createWithContent('uber.csv', $content);
+
+    $rows = (new SettlementParser)->parseRows($file, [
+        'columns' => [
+            'transaction_date' => ['index' => 0, 'format' => 'DD/MM/YYYY'],
+            'transaction_time' => ['index' => 0],
+            'amount' => ['index' => 1],
+            'reference' => ['index' => 2],
+        ],
+        'header_lines_count' => 1,
+    ]);
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]['transaction_date'])->toBe('2026-04-28')
+        ->and($rows[0]['transaction_time'])->toBe('14:27:52')
+        ->and($rows[0]['amount'])->toBe(514.0)
+        ->and($rows[0]['reference'])->toBe('01B02');
+});

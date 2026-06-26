@@ -492,10 +492,17 @@ class SettlementParser
             return null;
         }
 
-        if (is_numeric($raw) && (float) $raw >= 0 && (float) $raw < 1) {
-            $secs = (int) round((float) $raw * 86400);
+        // Excel time serial (fraction of a day, e.g. 0.6475) or a full datetime
+        // serial (e.g. 46140.6027 = date + time): take the fractional part as the
+        // time. A bare integer (date-only serial) has no time → fall through.
+        if (is_numeric($raw) && (float) $raw >= 0) {
+            $value = (float) $raw;
+            $frac = $value - floor($value);
+            if ($value < 1 || $frac > 0.0) {
+                $secs = ((int) round($frac * 86400)) % 86400;
 
-            return sprintf('%02d:%02d:%02d', intdiv($secs, 3600), intdiv($secs % 3600, 60), $secs % 60);
+                return sprintf('%02d:%02d:%02d', intdiv($secs, 3600), intdiv($secs % 3600, 60), $secs % 60);
+            }
         }
 
         // 12-hour with am/pm marker.

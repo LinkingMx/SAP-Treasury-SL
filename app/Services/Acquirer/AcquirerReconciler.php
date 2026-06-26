@@ -217,7 +217,7 @@ final class AcquirerReconciler
             ->where(function ($query): void {
                 $query->whereNull('status')->orWhere('status', 'not like', '%cancel%');
             })
-            ->get(['id', 'upload_id', 'acquirer_id', 'reference', 'authorization', 'transaction_date', 'transaction_time', 'amount']);
+            ->get(['id', 'upload_id', 'acquirer_id', 'reference', 'authorization', 'transaction_date', 'transaction_time', 'amount', 'status']);
 
         $grouped = [];
 
@@ -239,9 +239,161 @@ final class AcquirerReconciler
                 'transaction_date' => $settlement->transaction_date->format('Y-m-d'),
                 'transaction_time' => $settlement->transaction_time,
                 'amount' => (float) $settlement->amount,
+                'status' => $settlement->status,
             ];
         }
 
         return $grouped;
+    }
+
+    /**
+     * Row-level reconciliation detail for one payment type (drill-down).
+     *
+     * @param  array<int, array<string, mixed>>  $gcorePayments
+     * @return array{
+     *   matched: array<int, array<string, mixed>>,
+     *   orphans: array<int, array<string, mixed>>,
+     *   pending: array<int, array<string, mixed>>,
+     *   summary: array{matched: int, orphans: int, pending: int, saved: int}
+     * }
+     */
+    public function detail(int $branchId, string $from, string $to, array $gcorePayments, string $paymentType): array
+    {
+        $startHour = (int) substr((string) config('services.gcore.business_day_start', '05:00:00'), 0, 2);
+
+        $paymentById = [];
+        foreach ($gcorePayments as $payment) {
+            $paymentById[(int) ($payment['id'] ?? 0)] = $payment;
+        }
+
+        $acquirerIds = Acquirer::all()
+            ->filter(fn (Acquirer $a): bool => in_array($paymentType, $a->parrot_payment_type_names ?? [], true))
+            ->pluck('id')
+            ->all();
+
+        $rowsByAcquirer = $this->loadSettlementRows($branchId, $from, $to, $startHour);
+
+        $existing = PaymentOrder::query()
+            ->where('branch_id', $branchId)
+            ->whereIn('parrot_payment_id', array_keys($paymentById) ?: [0])
+            ->get(['external_settlement_id', 'parrot_payment_id']);
+        $savedBySettlement = $existing->keyBy('external_settlement_id');
+
+        $matched = [];
+        $orphans = [];
+        $usedPaymentIds = $existing->pluck('parrot_payment_id')->map(fn ($id): int => (int) $id)->all();
+        $savedCount = 0;
+
+        foreach ($acquirerIds as $acquirerId) {
+            $rows = $rowsByAcquirer[$acquirerId] ?? [];
+            if ($rows === []) {
+                continue;
+            }
+
+            $acquirer = Acquirer::find($acquirerId);
+            $rule = $acquirer->matchRule();
+            $candidates = array_values(array_filter(
+                $gcorePayments,
+                static fn (array $p): bool => in_array($p['payment_type_name'] ?? '', $rule->parrotTypes, true),
+            ));
+
+            // Already-saved links for these settlements (only of this payment type).
+            foreach ($rows as $row) {
+                $link = $savedBySettlement->get($row['id']);
+                if ($link === null) {
+                    continue;
+                }
+                $pid = (int) $link->parrot_payment_id;
+                if (($paymentById[$pid]['payment_type_name'] ?? null) !== $paymentType) {
+                    continue;
+                }
+                $matched[] = $this->pairDetail($row, $paymentById[$pid] ?? null, $pid, true);
+                $savedCount++;
+            }
+
+            // Match the unsaved rows; collect proposed + orphans.
+            $unsaved = array_values(array_filter($rows, fn (array $r): bool => ! $savedBySettlement->has($r['id'])));
+            $results = $this->matcher->match($unsaved, $candidates, $rule, $usedPaymentIds, $startHour);
+
+            foreach ($results as $result) {
+                $row = $unsaved[$result->rowIndex];
+
+                if (! $result->matched()) {
+                    $orphans[] = [
+                        'id' => $row['id'],
+                        'transaction_date' => $row['transaction_date'],
+                        'transaction_time' => $row['transaction_time'],
+                        'amount' => $row['amount'],
+                        'reference' => $row['reference'],
+                        'authorization' => $row['authorization'],
+                        'status' => $row['status'] ?? null,
+                    ];
+
+                    continue;
+                }
+
+                $usedPaymentIds[] = $result->parrotPaymentId;
+                if (($paymentById[$result->parrotPaymentId]['payment_type_name'] ?? null) !== $paymentType) {
+                    continue;
+                }
+                $matched[] = $this->pairDetail($row, $paymentById[$result->parrotPaymentId] ?? null, $result->parrotPaymentId, false);
+            }
+        }
+
+        $used = array_flip($usedPaymentIds);
+        $pending = [];
+        foreach ($gcorePayments as $payment) {
+            if (($payment['payment_type_name'] ?? null) !== $paymentType || ($payment['status'] ?? null) !== 'CHARGED') {
+                continue;
+            }
+            if (isset($used[(int) ($payment['id'] ?? 0)])) {
+                continue;
+            }
+            $pending[] = [
+                'id' => (int) ($payment['id'] ?? 0),
+                'created_at_pos' => $payment['created_at_pos'] ?? null,
+                'business_day' => GcorePaymentsService::businessDay((string) ($payment['created_at_pos'] ?? '')),
+                'total' => (float) ($payment['total'] ?? 0),
+                'order_reference' => $payment['order_reference'] ?? null,
+            ];
+        }
+
+        return [
+            'matched' => $matched,
+            'orphans' => $orphans,
+            'pending' => $pending,
+            'summary' => ['matched' => count($matched), 'orphans' => count($orphans), 'pending' => count($pending), 'saved' => $savedCount],
+        ];
+    }
+
+    /**
+     * Build a matched settlement↔payment detail row.
+     *
+     * @param  array<string, mixed>  $row
+     * @param  array<string, mixed>|null  $payment
+     * @return array<string, mixed>
+     */
+    private function pairDetail(array $row, ?array $payment, int $paymentId, bool $saved): array
+    {
+        $total = (float) ($payment['total'] ?? 0);
+
+        return [
+            'settlement' => [
+                'id' => $row['id'],
+                'reference' => $row['reference'],
+                'transaction_date' => $row['transaction_date'],
+                'transaction_time' => $row['transaction_time'],
+                'amount' => $row['amount'],
+                'status' => $row['status'] ?? null,
+            ],
+            'payment' => [
+                'id' => $paymentId,
+                'business_day' => $payment !== null ? GcorePaymentsService::businessDay((string) ($payment['created_at_pos'] ?? '')) : null,
+                'total' => $total,
+                'order_reference' => $payment['order_reference'] ?? null,
+            ],
+            'diff' => round(abs($total - (float) $row['amount']), 2),
+            'saved' => $saved,
+        ];
     }
 }

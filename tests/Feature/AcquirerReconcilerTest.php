@@ -75,6 +75,26 @@ it('reports matches by business day without writing', function () {
     expect(PaymentOrder::count())->toBe(0);
 });
 
+it('returns row-level detail (matched, orphans, pending) for a payment type', function () {
+    ['branch' => $branch, 'payments' => $payments] = seedRappiScenario();
+    $reconciler = app(AcquirerReconciler::class);
+
+    $detail = $reconciler->detail($branch->id, '2026-04-01', '2026-04-30', $payments, 'Rappi');
+
+    expect($detail['summary'])->toBe(['matched' => 2, 'orphans' => 1, 'pending' => 1, 'saved' => 0])
+        ->and($detail['orphans'][0]['reference'])->toBe('ORD-4')
+        ->and((float) $detail['orphans'][0]['amount'])->toBe(500.0)
+        ->and($detail['pending'][0]['id'])->toBe(5)
+        ->and((float) $detail['pending'][0]['total'])->toBe(777.0)
+        ->and($detail['matched'][0]['saved'])->toBeFalse();
+
+    // After persisting, the matched pairs are flagged as saved history.
+    $reconciler->persist($branch->id, '2026-04-01', '2026-04-30', $payments, 1);
+    $after = $reconciler->detail($branch->id, '2026-04-01', '2026-04-30', $payments, 'Rappi');
+    expect($after['summary']['saved'])->toBe(2)
+        ->and(collect($after['matched'])->every(fn ($m): bool => $m['saved'] === true))->toBeTrue();
+});
+
 it('persists matches into payment_orders, idempotently, and honors history', function () {
     ['branch' => $branch, 'payments' => $payments] = seedRappiScenario();
     $reconciler = app(AcquirerReconciler::class);

@@ -195,6 +195,43 @@ it('persists the conciliation via the reconcile endpoint (idempotent)', function
     expect(PaymentOrder::count())->toBe(1);
 });
 
+it('returns the reconciliation detail for a payment type', function () {
+    fakeParrot([p('Rappi', 100, 0), p('Rappi', 999, 0)]); // first matches, second pending
+
+    $acquirer = Acquirer::factory()->delivery('Rappi')->create(['code' => 'RAPPI', 'name' => 'Rappi']);
+    $branch = Branch::factory()->create(['payment_branch' => 'Ryoshi Polanco']);
+    $user = ownerOf($branch);
+
+    ExternalSettlement::factory()->create([
+        'acquirer_id' => $acquirer->id, 'branch_id' => $branch->id,
+        'transaction_date' => '2026-05-15', 'transaction_time' => '12:00:00',
+        'amount' => 100.00, 'status' => 'pending_review', 'authorization' => null, 'reference' => 'ORD-1',
+    ]);
+    ExternalSettlement::factory()->create([
+        'acquirer_id' => $acquirer->id, 'branch_id' => $branch->id,
+        'transaction_date' => '2026-05-15', 'transaction_time' => '12:00:00',
+        'amount' => 500.00, 'status' => 'pending_review', 'authorization' => null, 'reference' => 'ORD-2',
+    ]);
+
+    $json = $this->actingAs($user)->getJson(route('parrot-payments.detail', [
+        'branch_id' => $branch->id, 'date_from' => '2026-05-01', 'date_to' => '2026-05-31', 'payment_type' => 'Rappi',
+    ]))->assertSuccessful()->json();
+
+    expect($json['summary']['matched'])->toBe(1)
+        ->and($json['summary']['orphans'])->toBe(1)
+        ->and($json['summary']['pending'])->toBe(1)
+        ->and($json['orphans'][0]['reference'])->toBe('ORD-2');
+});
+
+it('requires a payment_type for the detail endpoint', function () {
+    $branch = Branch::factory()->create(['payment_branch' => 'X']);
+    $user = ownerOf($branch);
+
+    $this->actingAs($user)->getJson(route('parrot-payments.detail', [
+        'branch_id' => $branch->id, 'date_from' => '2026-05-01', 'date_to' => '2026-05-31',
+    ]))->assertStatus(422)->assertJsonPath('success', false);
+});
+
 it('renders the page for an authenticated user', function () {
     $this->actingAs(User::factory()->create())
         ->get(route('parrot-payments'))

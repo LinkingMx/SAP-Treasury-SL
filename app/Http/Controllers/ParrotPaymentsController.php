@@ -133,6 +133,42 @@ class ParrotPaymentsController extends Controller
     }
 
     /**
+     * Row-level reconciliation detail for a payment type (drill-down).
+     */
+    public function detail(ParrotPaymentsDataRequest $request): JsonResponse
+    {
+        $paymentType = (string) $request->input('payment_type');
+        if ($paymentType === '') {
+            return response()->json(['success' => false, 'error' => 'Falta el tipo de pago.'], 422);
+        }
+
+        $branch = Branch::findOrFail($request->integer('branch_id'));
+
+        if (empty($branch->payment_branch)) {
+            return response()->json([
+                'success' => false,
+                'error' => "La sucursal «{$branch->name}» no tiene configurado el campo «Sucursal en API de Pagos» (payment_branch).",
+            ], 422);
+        }
+
+        $from = $request->date('date_from')->format('Y-m-d');
+        $to = $request->date('date_to')->format('Y-m-d');
+
+        [$windowFrom, $windowTo] = GcorePaymentsService::businessDayWindow($from, $to);
+        $result = $this->gcore->allParrotOrderPayments($branch->payment_branch, $windowFrom, $windowTo);
+
+        if (! $result['success']) {
+            return response()->json(['success' => false, 'error' => $result['error']], 502);
+        }
+
+        return response()->json([
+            'success' => true,
+            'payment_type' => $paymentType,
+            ...$this->reconciler->detail($branch->id, $from, $to, $result['data'], $paymentType),
+        ]);
+    }
+
+    /**
      * Aggregate CHARGED payments by payment_type_name.
      *
      * @param  array<int, array<string, mixed>>  $rows

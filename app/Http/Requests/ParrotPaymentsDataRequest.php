@@ -31,6 +31,7 @@ class ParrotPaymentsDataRequest extends FormRequest
             'branch_id' => ['required', 'exists:branches,id'],
             'date_from' => ['required', 'date'],
             'date_to' => ['required', 'date', 'after_or_equal:date_from'],
+            'payment_type' => ['nullable', 'string', 'max:255'],
         ];
     }
 

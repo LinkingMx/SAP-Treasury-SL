@@ -10,7 +10,8 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import { cn } from '@/lib/utils';
-import { Banknote, Bike, CheckCircle2, Coins, CreditCard, Filter, Loader2, type LucideIcon, Receipt, Save, Search, Truck, Wallet } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Banknote, Bike, CheckCircle2, Clock, Coins, CreditCard, FileWarning, Filter, Loader2, type LucideIcon, Receipt, Save, Search, Truck, Wallet } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -53,6 +54,40 @@ interface AcquirerRecon {
     matched: number;
     orphans: number;
     pending: number;
+}
+
+interface MatchedPair {
+    settlement: { id: number; reference: string | null; transaction_date: string; transaction_time: string | null; amount: number; status: string | null };
+    payment: { id: number; business_day: string | null; total: number; order_reference: string | null };
+    diff: number;
+    saved: boolean;
+}
+
+interface OrphanRow {
+    id: number;
+    transaction_date: string;
+    transaction_time: string | null;
+    amount: number;
+    reference: string | null;
+    authorization: string | null;
+    status: string | null;
+}
+
+interface PendingRow {
+    id: number;
+    created_at_pos: string | null;
+    business_day: string;
+    total: number;
+    order_reference: string | null;
+}
+
+interface DetailResponse {
+    success: boolean;
+    payment_type: string;
+    matched: MatchedPair[];
+    orphans: OrphanRow[];
+    pending: PendingRow[];
+    summary: { matched: number; orphans: number; pending: number; saved: number };
 }
 
 interface Props {
@@ -100,6 +135,10 @@ export default function ParrotPayments({ branches }: Props) {
     const [saving, setSaving] = useState(false);
     const [result, setResult] = useState<DataResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [detailOpen, setDetailOpen] = useState(false);
+    const [detailLoading, setDetailLoading] = useState(false);
+    const [detailType, setDetailType] = useState<string>('');
+    const [detail, setDetail] = useState<DetailResponse | null>(null);
 
     const handleConsultar = async () => {
         if (!branchId) return;
@@ -152,6 +191,28 @@ export default function ParrotPayments({ branches }: Props) {
             setError('Error de red al guardar la conciliación.');
         } finally {
             setSaving(false);
+        }
+    };
+
+    const openDetail = async (paymentType: string) => {
+        setDetailType(paymentType);
+        setDetail(null);
+        setDetailLoading(true);
+        setDetailOpen(true);
+        try {
+            const params = new URLSearchParams({ branch_id: branchId, date_from: dateFrom, date_to: dateTo, payment_type: paymentType });
+            const res = await fetch(`/treasury/parrot-payments/detail?${params.toString()}`, {
+                headers: {
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || '',
+                },
+            });
+            const json = await res.json();
+            if (res.ok && json.success) setDetail(json);
+        } catch {
+            // keep modal open; empty detail
+        } finally {
+            setDetailLoading(false);
         }
     };
 
@@ -234,7 +295,15 @@ export default function ParrotPayments({ branches }: Props) {
                                     const fully = t.has_settlements && t.matched_count >= t.count;
 
                                     return (
-                                        <div key={t.payment_type_name} className="rounded-md bg-muted/40 p-3">
+                                        <div
+                                            key={t.payment_type_name}
+                                            className={cn(
+                                                'rounded-md bg-muted/40 p-3',
+                                                t.has_settlements && 'cursor-pointer transition-colors hover:bg-muted/70',
+                                            )}
+                                            role={t.has_settlements ? 'button' : undefined}
+                                            onClick={t.has_settlements ? () => openDetail(t.payment_type_name) : undefined}
+                                        >
                                             <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
                                                 <Icon className="h-3 w-3" />
                                                 {t.payment_type_name} · {formatInt(t.count)}
@@ -301,6 +370,104 @@ export default function ParrotPayments({ branches }: Props) {
                     )}
                 </PageSection>
             </div>
+
+            <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+                <DialogContent className="flex max-h-[85vh] max-w-3xl flex-col overflow-hidden">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-base">
+                            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+                            Conciliación — {detailType}
+                        </DialogTitle>
+                        <DialogDescription className="text-xs">
+                            {result ? `${result.branch.name} · ${result.period.from} a ${result.period.to}` : ''}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {detailLoading ? (
+                        <div className="flex items-center justify-center py-12">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : detail ? (
+                        <div className="flex-1 space-y-5 overflow-y-auto pr-1">
+                            <div className="grid grid-cols-3 gap-3">
+                                <StatCard icon={CheckCircle2} label="Conciliados" value={formatInt(detail.summary.matched)} tone="success" />
+                                <StatCard icon={FileWarning} label="Huérfanos" value={formatInt(detail.summary.orphans)} tone={detail.summary.orphans > 0 ? 'danger' : 'default'} />
+                                <StatCard icon={Clock} label="Pendientes" value={formatInt(detail.summary.pending)} tone={detail.summary.pending > 0 ? 'danger' : 'default'} />
+                            </div>
+
+                            {detail.pending.length > 0 ? (
+                                <div>
+                                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+                                        Pendientes — pagos sin estado de cuenta ({detail.pending.length})
+                                    </h4>
+                                    <div className="space-y-2">
+                                        {detail.pending.map((row) => (
+                                            <div key={row.id} className="rounded-md border bg-card p-3 text-sm">
+                                                <p className="font-medium tabular-nums">{formatCurrency(row.total)}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {row.business_day} · Parrot #{row.id} · {row.order_reference ?? '—'}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            {detail.orphans.length > 0 ? (
+                                <div>
+                                    <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-rose-600 dark:text-rose-400">
+                                        Huérfanos — estado de cuenta sin pago ({detail.orphans.length})
+                                    </h4>
+                                    <div className="space-y-2">
+                                        {detail.orphans.map((row) => (
+                                            <div key={row.id} className="rounded-md border bg-card p-3 text-sm">
+                                                <p className="font-medium tabular-nums">{formatCurrency(row.amount)}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {row.transaction_date}
+                                                    {row.transaction_time ? ` ${row.transaction_time}` : ''} · ref {row.reference ?? '—'}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            <div>
+                                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Conciliados ({detail.matched.length})
+                                </h4>
+                                <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                                    {detail.matched.map((m) => (
+                                        <div key={m.settlement.id} className="flex items-start justify-between gap-3 rounded-md border bg-card p-3 text-sm">
+                                            <div className="min-w-0">
+                                                <p className="tabular-nums">
+                                                    {formatCurrency(m.settlement.amount)}{' '}
+                                                    <span className="text-muted-foreground">· orden {m.settlement.reference ?? '—'}</span>
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {m.settlement.transaction_date} → Parrot #{m.payment.id}
+                                                    {m.diff > 0 ? ` · dif ${formatCurrency(m.diff)}` : ''}
+                                                </p>
+                                            </div>
+                                            <span className={cn('shrink-0 text-xs', m.saved ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')}>
+                                                {m.saved ? 'guardado' : 'propuesto'}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="py-8 text-center text-sm text-muted-foreground">Sin detalle.</p>
+                    )}
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDetailOpen(false)}>
+                            Cerrar
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </AppLayout>
     );
 }

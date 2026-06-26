@@ -78,6 +78,19 @@ it('excludes payments already matched elsewhere', function () use ($cardRule) {
     expect($results[0]->matched())->toBeFalse();
 });
 
+it('matches by restaurant business day (5am cutoff) when enabled', function () {
+    $rule = new MatchRule(['Rappi'], 0.50);
+    // Settlement belongs to the Apr 1 operating day.
+    $rows = [['transaction_date' => '2026-04-01', 'transaction_time' => '22:00:00', 'amount' => 100.0]];
+    // Payment swiped at 1:30am Apr 2 → still the Apr 1 business day.
+    $payments = [['id' => 1, 'payment_type_name' => 'Rappi', 'total' => 100.0, 'status' => 'CHARGED', 'created_at_pos' => '2026-04-02T01:30:00-06:00']];
+
+    // Calendar matching fails (Apr 1 vs Apr 2)...
+    expect((new AcquirerMatcher)->match($rows, $payments, $rule)[0]->matched())->toBeFalse();
+    // ...business-day matching (cutoff 5) succeeds.
+    expect((new AcquirerMatcher)->match($rows, $payments, $rule, [], 5)[0]->matched())->toBeTrue();
+});
+
 it('honours the time window when configured', function () use ($cardRule) {
     $payments = [payment(['created_at_pos' => '2026-05-15T12:40:00-06:00'])]; // 40 min away
 

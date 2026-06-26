@@ -1,6 +1,8 @@
 <?php
 
+use App\Models\Acquirer;
 use App\Models\Branch;
+use App\Models\ExternalSettlement;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 
@@ -129,6 +131,31 @@ it('surfaces a 502 when gCore is unreachable', function () {
         ->getJson(dataUrl($branch->id))
         ->assertStatus(502)
         ->assertJsonPath('success', false);
+});
+
+it('annotates payment-type cards with conciliation when settlements are loaded', function () {
+    fakeParrot([p('Rappi', 100, 0)]);
+
+    $acquirer = Acquirer::factory()->delivery('Rappi')->create(['code' => 'RAPPI', 'name' => 'Rappi']);
+    $branch = Branch::factory()->create(['payment_branch' => 'Ryoshi Polanco']);
+    $user = ownerOf($branch);
+
+    ExternalSettlement::factory()->create([
+        'acquirer_id' => $acquirer->id,
+        'branch_id' => $branch->id,
+        'transaction_date' => '2026-05-15',
+        'transaction_time' => '12:00:00',
+        'amount' => 100.00,
+        'status' => 'pending_review',
+    ]);
+
+    $json = $this->actingAs($user)->getJson(dataUrl($branch->id))->assertSuccessful()->json();
+
+    $rappi = collect($json['by_payment_type'])->firstWhere('payment_type_name', 'Rappi');
+    expect($rappi['has_settlements'])->toBeTrue()
+        ->and($rappi['matched_count'])->toBe(1)
+        ->and((float) $rappi['reconciled_pct'])->toBe(100.0)
+        ->and($json['reconciliation']['RAPPI']['matched'])->toBe(1);
 });
 
 it('renders the page for an authenticated user', function () {

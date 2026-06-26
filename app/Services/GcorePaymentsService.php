@@ -40,6 +40,26 @@ class GcorePaymentsService
     }
 
     /**
+     * Resolve the restaurant "business day" (Y-m-d) a local datetime belongs to.
+     * Anything before the day-start cutoff (default 05:00) counts as the prior day.
+     * The timezone of the input is ignored — the local wall-clock is what matters.
+     */
+    public static function businessDay(string $dateTime, ?string $dayStart = null): string
+    {
+        $dayStart ??= (string) config('services.gcore.business_day_start', '05:00:00');
+        $cutoffHour = (int) substr($dayStart, 0, 2);
+
+        // Use the literal local part (drop any timezone suffix like -06:00).
+        $local = Carbon::parse(substr(str_replace('T', ' ', trim($dateTime)), 0, 19));
+
+        if ($local->hour < $cutoffHour) {
+            $local = $local->copy()->subDay();
+        }
+
+        return $local->format('Y-m-d');
+    }
+
+    /**
      * Fetch a single page of Parrot POS order payments from gCore.
      *
      * The branch is identified by the gCore `branch_name`, which in this app is

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ParrotPaymentsDataRequest;
 use App\Models\Branch;
+use App\Services\Acquirer\AcquirerReconciler;
 use App\Services\GcorePaymentsService;
 use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
@@ -11,7 +12,10 @@ use Inertia\Response;
 
 class ParrotPaymentsController extends Controller
 {
-    public function __construct(protected GcorePaymentsService $gcore) {}
+    public function __construct(
+        protected GcorePaymentsService $gcore,
+        protected AcquirerReconciler $reconciler,
+    ) {}
 
     /**
      * Render the Parrot payments page with the user's branches.
@@ -58,6 +62,25 @@ class ParrotPaymentsController extends Controller
 
         [$byType, $totals] = $this->aggregateByPaymentType($result['data']);
 
+        // Reconcile the loaded acquirer settlements against these payments and
+        // annotate each payment-type card with its conciliation status.
+        $reconciliation = $this->reconciler->reconcile($branch->id, $from, $to, $result['data']);
+        $covered = array_flip($reconciliation['covered_types']);
+
+        $byType = array_map(function (array $entry) use ($reconciliation, $covered): array {
+            $type = $entry['payment_type_name'];
+            $matched = $reconciliation['by_type'][$type] ?? ['matched_count' => 0, 'matched_sum' => 0.0];
+
+            $entry['has_settlements'] = isset($covered[$type]);
+            $entry['matched_count'] = $matched['matched_count'];
+            $entry['matched_sum'] = $matched['matched_sum'];
+            $entry['reconciled_pct'] = $entry['count'] > 0
+                ? round($matched['matched_count'] / $entry['count'] * 100, 1)
+                : 0.0;
+
+            return $entry;
+        }, $byType);
+
         return response()->json([
             'success' => true,
             'branch' => [
@@ -69,6 +92,7 @@ class ParrotPaymentsController extends Controller
             'window' => ['from' => $windowFrom, 'to' => $windowTo],
             'totals' => $totals,
             'by_payment_type' => $byType,
+            'reconciliation' => $reconciliation['by_acquirer'],
         ]);
     }
 

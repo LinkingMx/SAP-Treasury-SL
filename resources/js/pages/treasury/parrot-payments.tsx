@@ -9,7 +9,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { Banknote, Bike, Coins, CreditCard, Filter, type LucideIcon, Receipt, Search, Truck, Wallet } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Banknote, Bike, CheckCircle2, Coins, CreditCard, Filter, type LucideIcon, Receipt, Search, Truck, Wallet } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -28,6 +29,10 @@ interface PaymentTypeTotal {
     sum_amount: number;
     sum_tip: number;
     sum_total: number;
+    has_settlements: boolean;
+    matched_count: number;
+    matched_sum: number;
+    reconciled_pct: number;
 }
 
 interface DataResponse {
@@ -185,14 +190,37 @@ export default function ParrotPayments({ branches }: Props) {
                             </div>
 
                             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                                {result.by_payment_type.map((t) => (
-                                    <StatCard
-                                        key={t.payment_type_name}
-                                        icon={iconForType(t.payment_type_name)}
-                                        label={`${t.payment_type_name} · ${formatInt(t.count)}`}
-                                        value={formatCurrency(t.sum_total)}
-                                    />
-                                ))}
+                                {result.by_payment_type.map((t) => {
+                                    const Icon = iconForType(t.payment_type_name);
+                                    const fully = t.has_settlements && t.matched_count >= t.count;
+
+                                    return (
+                                        <div key={t.payment_type_name} className="rounded-md bg-muted/40 p-3">
+                                            <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+                                                <Icon className="h-3 w-3" />
+                                                {t.payment_type_name} · {formatInt(t.count)}
+                                            </div>
+                                            <p className="mt-1 text-base font-semibold tabular-nums">{formatCurrency(t.sum_total)}</p>
+                                            {t.has_settlements ? (
+                                                <p
+                                                    className={cn(
+                                                        'mt-1.5 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium tabular-nums',
+                                                        fully
+                                                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+                                                    )}
+                                                >
+                                                    {fully ? <CheckCircle2 className="h-3 w-3" /> : null}
+                                                    {fully
+                                                        ? `Conciliado ${formatInt(t.matched_count)}/${formatInt(t.count)}`
+                                                        : `${formatInt(t.matched_count)}/${formatInt(t.count)} · ${t.reconciled_pct}%`}
+                                                </p>
+                                            ) : (
+                                                <p className="mt-1.5 text-xs text-muted-foreground/60">Sin estado de cuenta</p>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

@@ -18,15 +18,16 @@ final class AcquirerMatcher
      * @param  array<int, array{transaction_date: string, transaction_time?: string|null, amount: float|int}>  $settlementRows
      * @param  array<int, array{id?: int, payment_type_name?: string, total?: float|int, status?: string, created_at_pos?: string, order_reference?: string|null}>  $apiPayments
      * @param  array<int, int>  $excludePaymentIds  Parrot payment ids already matched elsewhere (e.g. prior uploads)
+     * @param  int|null  $businessDayStartHour  when set, compare restaurant business days (e.g. 5 = 05:00 cutoff) instead of calendar dates
      * @return array<int, MatchResult> one result per settlement row, in input order
      */
-    public function match(array $settlementRows, array $apiPayments, MatchRule $rule, array $excludePaymentIds = []): array
+    public function match(array $settlementRows, array $apiPayments, MatchRule $rule, array $excludePaymentIds = [], ?int $businessDayStartHour = null): array
     {
         $used = array_fill_keys($excludePaymentIds, true);
         $results = [];
 
         foreach ($settlementRows as $index => $row) {
-            $best = $this->findBest($row, $apiPayments, $rule, $used);
+            $best = $this->findBest($row, $apiPayments, $rule, $used, $businessDayStartHour);
 
             if ($best === null) {
                 $results[] = new MatchResult($index, null, null, null, null, null);
@@ -61,10 +62,14 @@ final class AcquirerMatcher
      * @param  array<int, bool>  $used
      * @return array{payment: array<string, mixed>, diff: float}|null
      */
-    private function findBest(array $row, array $apiPayments, MatchRule $rule, array $used): ?array
+    private function findBest(array $row, array $apiPayments, MatchRule $rule, array $used, ?int $businessDayStartHour = null): ?array
     {
         $amount = (float) $row['amount'];
         $best = null;
+
+        $rowDay = $businessDayStartHour === null
+            ? $row['transaction_date']
+            : $this->businessDay($row['transaction_date'].' '.($row['transaction_time'] ?? '00:00:00'), $businessDayStartHour);
 
         foreach ($apiPayments as $payment) {
             if (($payment['status'] ?? null) !== 'CHARGED') {
@@ -75,7 +80,11 @@ final class AcquirerMatcher
                 continue;
             }
 
-            if (substr((string) ($payment['created_at_pos'] ?? ''), 0, 10) !== $row['transaction_date']) {
+            $paymentDay = $businessDayStartHour === null
+                ? substr((string) ($payment['created_at_pos'] ?? ''), 0, 10)
+                : $this->businessDay((string) ($payment['created_at_pos'] ?? ''), $businessDayStartHour);
+
+            if ($paymentDay !== $rowDay) {
                 continue;
             }
 
@@ -125,5 +134,25 @@ final class AcquirerMatcher
         }
 
         return abs($paymentTs - $rowTs) <= $rule->timeWindowSeconds;
+    }
+
+    /**
+     * Restaurant business day (Y-m-d) for a local datetime: before the cutoff
+     * hour counts as the previous day. Timezone suffixes are ignored.
+     */
+    private function businessDay(string $dateTime, int $startHour): string
+    {
+        $local = substr(str_replace('T', ' ', trim($dateTime)), 0, 19);
+        $ts = strtotime($local);
+
+        if ($ts === false) {
+            return substr($local, 0, 10);
+        }
+
+        if ((int) date('G', $ts) < $startHour) {
+            $ts = strtotime('-1 day', $ts);
+        }
+
+        return date('Y-m-d', $ts);
     }
 }

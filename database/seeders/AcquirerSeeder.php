@@ -39,6 +39,17 @@ class AcquirerSeeder extends Seeder
                 'parrot_payment_type_names' => ['Rappi'],
                 'amount_tolerance' => 0.50,
                 'time_window_seconds' => null,
+                // Default mapping for the Rappi export (validated vs gCore April).
+                'column_map' => [
+                    'columns' => [
+                        'transaction_date' => ['header' => 'Fecha de creación orden', 'format' => 'es_datetime'],
+                        'amount' => ['header' => 'Venta Bruta'],
+                        'reference' => ['header' => 'ID de la órden'],
+                        'status' => ['header' => 'Estado de la órden'],
+                    ],
+                    'header_row' => 1,
+                    'delimiter' => "\t",
+                ],
             ],
             [
                 'code' => 'UBER_EATS',

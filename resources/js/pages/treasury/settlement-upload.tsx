@@ -31,7 +31,14 @@ const FIELDS: { key: string; label: string; required?: boolean }[] = [
     { key: 'status', label: 'Estatus' },
 ];
 
-const DATE_FORMATS = ['DD/MM/YYYY', 'DD/MM/YY', 'YYYY-MM-DD'];
+const COMBINED_DATETIME = 'es_datetime';
+
+const DATE_FORMATS: { value: string; label: string }[] = [
+    { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY' },
+    { value: 'DD/MM/YY', label: 'DD/MM/YY' },
+    { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD' },
+    { value: COMBINED_DATETIME, label: 'Fecha y hora juntas (español)' },
+];
 
 interface AcquirerOption {
     id: number;
@@ -68,6 +75,7 @@ interface HeadersResponse {
     delimiter: string;
     headers: string[];
     suggested_mapping: Record<string, number | null>;
+    suggested_format: string;
 }
 
 interface StoreResponse {
@@ -153,6 +161,7 @@ export default function SettlementUpload({ acquirers, branches, uploads: initial
                 setHeaderRow(json.header_row);
                 setDelimiter(json.delimiter);
                 setMapping(json.suggested_mapping);
+                setDateFormat(json.suggested_format || 'DD/MM/YYYY');
                 setStep('mapping');
             } else {
                 setError('No se pudieron leer las columnas del archivo.');
@@ -344,8 +353,8 @@ export default function SettlementUpload({ acquirers, branches, uploads: initial
                                         </SelectTrigger>
                                         <SelectContent>
                                             {DATE_FORMATS.map((f) => (
-                                                <SelectItem key={f} value={f}>
-                                                    {f}
+                                                <SelectItem key={f.value} value={f.value}>
+                                                    {f.label}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
@@ -354,28 +363,33 @@ export default function SettlementUpload({ acquirers, branches, uploads: initial
                             </div>
 
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                {FIELDS.map(({ key, label, required }) => (
-                                    <FilterField key={key} label={required ? `${label} *` : label}>
-                                        <Select
-                                            value={mapping[key] == null ? NONE : String(mapping[key])}
-                                            onValueChange={(v) =>
-                                                setMapping((prev) => ({ ...prev, [key]: v === NONE ? null : Number(v) }))
-                                            }
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="— ninguna —" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value={NONE}>— ninguna —</SelectItem>
-                                                {headers.map((h, i) => (
-                                                    <SelectItem key={i} value={String(i)}>
-                                                        {h || `Columna ${i + 1}`}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </FilterField>
-                                ))}
+                                {FIELDS.map(({ key, label, required }) => {
+                                    const timeFromDate = key === 'transaction_time' && dateFormat === COMBINED_DATETIME;
+
+                                    return (
+                                        <FilterField key={key} label={required ? `${label} *` : label}>
+                                            <Select
+                                                disabled={timeFromDate}
+                                                value={timeFromDate || mapping[key] == null ? NONE : String(mapping[key])}
+                                                onValueChange={(v) =>
+                                                    setMapping((prev) => ({ ...prev, [key]: v === NONE ? null : Number(v) }))
+                                                }
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder={timeFromDate ? 'Incluida en la fecha' : '— ninguna —'} />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value={NONE}>— ninguna —</SelectItem>
+                                                    {headers.map((h, i) => (
+                                                        <SelectItem key={i} value={String(i)}>
+                                                            {h || `Columna ${i + 1}`}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </FilterField>
+                                    );
+                                })}
                             </div>
 
                             <div className="flex flex-col items-start gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">

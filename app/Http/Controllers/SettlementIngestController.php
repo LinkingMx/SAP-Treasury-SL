@@ -56,15 +56,17 @@ class SettlementIngestController extends Controller
             ? Acquirer::find($request->integer('acquirer_id'))?->column_map
             : null;
 
-        $headerRow = $read['rows'][$read['header_row']] ?? [];
+        $suggestedHeaderRow = $savedMap['header_row'] ?? $read['header_row'];
+        $headerRow = $read['rows'][$suggestedHeaderRow] ?? ($read['rows'][$read['header_row']] ?? []);
 
         return response()->json([
             'success' => true,
             'rows' => $read['rows'],
-            'header_row' => $read['header_row'],
-            'delimiter' => $read['delimiter'],
+            'header_row' => $suggestedHeaderRow,
+            'delimiter' => $savedMap['delimiter'] ?? $read['delimiter'],
             'headers' => $headerRow,
             'suggested_mapping' => $this->parser->suggestMapping($headerRow, $savedMap),
+            'suggested_format' => $savedMap['columns']['transaction_date']['format'] ?? 'DD/MM/YYYY',
         ]);
     }
 
@@ -165,6 +167,9 @@ class SettlementIngestController extends Controller
             'column_map' => [
                 'columns' => $columns,
                 'delimiter' => $parseConfig['delimiter'] ?? null,
+                'header_row' => isset($parseConfig['header_lines_count'])
+                    ? max(0, (int) $parseConfig['header_lines_count'] - 1)
+                    : null,
             ],
         ]);
     }

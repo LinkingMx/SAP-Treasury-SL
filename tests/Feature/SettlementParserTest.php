@@ -60,3 +60,44 @@ it('throws when date or amount is not mapped', function () {
     expect(fn () => (new SettlementParser)->parseRows(parserCsv(), ['columns' => ['amount' => ['index' => 2]]]))
         ->toThrow(RuntimeException::class);
 });
+
+it('parses a combined Spanish datetime in one column (Rappi)', function () {
+    $content = "Fecha\tVenta Bruta\tID\nmié. 01 abr. 2026, 2:04:07 p. m.\t2102\t2429417418\n";
+    $file = UploadedFile::fake()->createWithContent('rappi.csv', $content);
+
+    $rows = (new SettlementParser)->parseRows($file, [
+        'columns' => [
+            'transaction_date' => ['index' => 0, 'format' => 'es_datetime'],
+            'amount' => ['index' => 1],
+            'reference' => ['index' => 2],
+        ],
+        'header_lines_count' => 1,
+    ]);
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]['transaction_date'])->toBe('2026-04-01')
+        ->and($rows[0]['transaction_time'])->toBe('14:04:07')
+        ->and($rows[0]['amount'])->toBe(2102.0)
+        ->and($rows[0]['reference'])->toBe('2429417418');
+});
+
+it('parses separate date + 12-hour time columns (MIFEL)', function () {
+    $content = "Fecha,Hora,Monto,Auth\n27/04/26,9:11:07 p.m.,28498.15,803478\n";
+    $file = UploadedFile::fake()->createWithContent('mifel.csv', $content);
+
+    $rows = (new SettlementParser)->parseRows($file, [
+        'columns' => [
+            'transaction_date' => ['index' => 0, 'format' => 'DD/MM/YY'],
+            'transaction_time' => ['index' => 1],
+            'amount' => ['index' => 2],
+            'authorization' => ['index' => 3],
+        ],
+        'header_lines_count' => 1,
+    ]);
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]['transaction_date'])->toBe('2026-04-27')
+        ->and($rows[0]['transaction_time'])->toBe('21:11:07')
+        ->and($rows[0]['amount'])->toBe(28498.15)
+        ->and($rows[0]['authorization'])->toBe('803478');
+});

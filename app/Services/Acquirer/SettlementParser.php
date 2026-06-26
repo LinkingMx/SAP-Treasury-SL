@@ -35,6 +35,22 @@ class SettlementParser
     ];
 
     /**
+     * Spanish month abbreviations → number (for combined datetimes like Rappi).
+     *
+     * @var array<string, int>
+     */
+    private const MONTHS_ES = [
+        'ene' => 1, 'feb' => 2, 'mar' => 3, 'abr' => 4, 'may' => 5, 'jun' => 6,
+        'jul' => 7, 'ago' => 8, 'sep' => 9, 'oct' => 10, 'nov' => 11, 'dic' => 12,
+    ];
+
+    /**
+     * Date format hint that means "this column holds date AND time together"
+     * (e.g. Rappi: "mié. 01 abr. 2026, 2:04:07 p. m.").
+     */
+    public const COMBINED_DATETIME = 'es_datetime';
+
+    /**
      * The settlement fields a mapping can target.
      *
      * @var array<int, string>
@@ -155,9 +171,14 @@ class SettlementParser
                 continue;
             }
 
+            // Time comes from the date column (combined) or its own mapped column.
+            $timeSource = $dateFormat === self::COMBINED_DATETIME
+                ? ($fields[$dateIndex] ?? null)
+                : $this->valueAt($fields, $columns, 'transaction_time');
+
             $rows[] = [
                 'transaction_date' => $date,
-                'transaction_time' => $this->valueAt($fields, $columns, 'transaction_time'),
+                'transaction_time' => $this->parseTime($timeSource),
                 'amount' => abs($amount),
                 'card_type' => $this->valueAt($fields, $columns, 'card_type'),
                 'card_brand' => $this->valueAt($fields, $columns, 'card_brand'),
@@ -374,6 +395,14 @@ class SettlementParser
                 return \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float) $raw)->format('Y-m-d');
             }
 
+            // Combined Spanish datetime (Rappi): "mié. 01 abr. 2026, 2:04:07 p. m."
+            if ($format === self::COMBINED_DATETIME || preg_match('/\b(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)\b/iu', $raw)) {
+                $spanish = $this->parseSpanishDate($raw);
+                if ($spanish !== null) {
+                    return $spanish;
+                }
+            }
+
             $sep = str_contains($raw, '/') ? '/' : '-';
             $parts = explode($sep, explode(' ', $raw)[0]);
 
@@ -396,5 +425,78 @@ class SettlementParser
         } catch (\Exception $e) {
             return null;
         }
+    }
+
+    /**
+     * Parse a Spanish-style date embedded in a string (e.g. "mié. 01 abr. 2026,
+     * 2:04:07 p. m." → 2026-04-01). Same logic that validated against gCore.
+     */
+    private function parseSpanishDate(string $raw): ?string
+    {
+        if (! preg_match('/(\d{1,2})\s+(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)\.?\s+(\d{4})/iu', $raw, $m)) {
+            return null;
+        }
+
+        $month = self::MONTHS_ES[strtolower($m[2])] ?? null;
+        if ($month === null) {
+            return null;
+        }
+
+        $day = (int) $m[1];
+        $year = (int) $m[3];
+
+        if (! checkdate($month, $day, $year)) {
+            return null;
+        }
+
+        return sprintf('%04d-%02d-%02d', $year, $month, $day);
+    }
+
+    /**
+     * Parse a time into HH:MM:SS. Handles 12-hour "9:11:07 p.m." / "2:04:07 p. m.",
+     * 24-hour "21:11:07", and Excel time serials (fraction of a day). Null if none.
+     */
+    private function parseTime(?string $raw): ?string
+    {
+        if ($raw === null) {
+            return null;
+        }
+        $raw = trim($raw);
+        if ($raw === '') {
+            return null;
+        }
+
+        if (is_numeric($raw) && (float) $raw >= 0 && (float) $raw < 1) {
+            $secs = (int) round((float) $raw * 86400);
+
+            return sprintf('%02d:%02d:%02d', intdiv($secs, 3600), intdiv($secs % 3600, 60), $secs % 60);
+        }
+
+        // 12-hour with am/pm marker.
+        if (preg_match('/(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([ap])\.?\s*m/iu', $raw, $m)) {
+            $h = (int) $m[1];
+            $min = (int) $m[2];
+            $s = isset($m[3]) && $m[3] !== '' ? (int) $m[3] : 0;
+            $isPm = strtolower($m[4]) === 'p';
+            if ($isPm && $h < 12) {
+                $h += 12;
+            }
+            if (! $isPm && $h === 12) {
+                $h = 0;
+            }
+
+            return $h <= 23 && $min <= 59 && $s <= 59 ? sprintf('%02d:%02d:%02d', $h, $min, $s) : null;
+        }
+
+        // 24-hour.
+        if (preg_match('/(\d{1,2}):(\d{2})(?::(\d{2}))?/', $raw, $m)) {
+            $h = (int) $m[1];
+            $min = (int) $m[2];
+            $s = isset($m[3]) && $m[3] !== '' ? (int) $m[3] : 0;
+
+            return $h <= 23 && $min <= 59 && $s <= 59 ? sprintf('%02d:%02d:%02d', $h, $min, $s) : null;
+        }
+
+        return null;
     }
 }

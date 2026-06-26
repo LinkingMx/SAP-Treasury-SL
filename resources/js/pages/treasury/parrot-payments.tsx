@@ -34,6 +34,7 @@ interface DataResponse {
     success: boolean;
     branch: { id: number; name: string; payment_branch: string };
     period: { from: string; to: string };
+    window: { from: string; to: string };
     totals: { count: number; sum_amount: number; sum_tip: number; sum_total: number };
     by_payment_type: PaymentTypeTotal[];
 }
@@ -111,7 +112,7 @@ export default function ParrotPayments({ branches }: Props) {
     };
 
     const sectionDescription = result
-        ? `${result.branch.name} · ${result.period.from} a ${result.period.to}`
+        ? `${result.branch.name} · día operativo ${result.window.from.replace('T', ' ')} → ${result.window.to.replace('T', ' ')}`
         : 'Selecciona una sucursal y un rango de fechas para consultar.';
 
     return (
@@ -148,7 +149,10 @@ export default function ParrotPayments({ branches }: Props) {
                         <Input id="date-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
                     </FilterField>
 
-                    <div className="flex justify-end pt-1 lg:col-span-3">
+                    <div className="flex flex-col items-start gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between lg:col-span-3">
+                        <p className="text-xs text-muted-foreground">
+                            Día operativo de restaurante: de 5:00 a.m. a 5:00 a.m. del día siguiente. El 31 de mayo cierra el 1 de junio a las 5:00 a.m.
+                        </p>
                         <Button onClick={handleConsultar} disabled={!branchId || loading}>
                             <Search className="h-4 w-4" />
                             {loading ? 'Consultando…' : 'Consultar'}

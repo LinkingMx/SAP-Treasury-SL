@@ -43,7 +43,11 @@ class ParrotPaymentsController extends Controller
         $from = $request->date('date_from')->format('Y-m-d');
         $to = $request->date('date_to')->format('Y-m-d');
 
-        $result = $this->gcore->allParrotOrderPayments($branch->payment_branch, $from, $to);
+        // Restaurants operate one day into the next: query the business-day window
+        // (05:00 of date_from until 05:00 the morning after date_to).
+        [$windowFrom, $windowTo] = GcorePaymentsService::businessDayWindow($from, $to);
+
+        $result = $this->gcore->allParrotOrderPayments($branch->payment_branch, $windowFrom, $windowTo);
 
         if (! $result['success']) {
             return response()->json([
@@ -62,6 +66,7 @@ class ParrotPaymentsController extends Controller
                 'payment_branch' => $branch->payment_branch,
             ],
             'period' => ['from' => $from, 'to' => $to],
+            'window' => ['from' => $windowFrom, 'to' => $windowTo],
             'totals' => $totals,
             'by_payment_type' => $byType,
         ]);

@@ -48,6 +48,7 @@ return [
     'gcore' => [
         'base_url' => env('GCORE_BASE_URL', 'http://gcorev26.test'),
         'timeout' => (int) env('GCORE_TIMEOUT', 30),
+        'business_day_start' => env('GCORE_BUSINESS_DAY_START', '05:00:00'),
     ],
 
 ];

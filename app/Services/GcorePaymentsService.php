@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Carbon\Carbon;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -16,6 +17,26 @@ class GcorePaymentsService
     {
         $this->baseUrl = rtrim((string) config('services.gcore.base_url'), '/');
         $this->timeout = (int) config('services.gcore.timeout', 30);
+    }
+
+    /**
+     * Build the [from, to] datetime window for a restaurant "business day" range.
+     *
+     * Restaurants/bars operate one calendar day into the next: a business day
+     * runs from $dayStart (default 05:00) until $dayStart the following morning.
+     * So picking date_from..date_to yields date_from 05:00 → (date_to + 1 day) 05:00.
+     * e.g. 2026-05-01..2026-05-31 → 2026-05-01T05:00:00 .. 2026-06-01T05:00:00.
+     *
+     * @return array{0: string, 1: string} ISO datetimes (no timezone), e.g. 2026-05-01T05:00:00
+     */
+    public static function businessDayWindow(string $dateFrom, string $dateTo, ?string $dayStart = null): array
+    {
+        $dayStart ??= (string) config('services.gcore.business_day_start', '05:00:00');
+
+        $from = Carbon::parse($dateFrom)->setTimeFromTimeString($dayStart);
+        $to = Carbon::parse($dateTo)->addDay()->setTimeFromTimeString($dayStart);
+
+        return [$from->format('Y-m-d\TH:i:s'), $to->format('Y-m-d\TH:i:s')];
     }
 
     /**

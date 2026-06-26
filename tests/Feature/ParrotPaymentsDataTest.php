@@ -69,6 +69,15 @@ it('aggregates CHARGED payments by type and excludes VOIDED', function () {
     $credito = collect($json['by_payment_type'])->firstWhere('payment_type_name', 'CREDITO');
     expect($credito['count'])->toBe(2)
         ->and((float) $credito['sum_total'])->toBe(150.0);
+
+    // Restaurant business-day window: 2026-05-01..2026-05-31 → 05:00 to next-day 05:00.
+    expect($json['window'])->toBe(['from' => '2026-05-01T05:00:00', 'to' => '2026-06-01T05:00:00']);
+    Http::assertSent(function ($request) {
+        $url = urldecode($request->url());
+
+        return str_contains($url, 'from=2026-05-01T05:00:00')
+            && str_contains($url, 'to=2026-06-01T05:00:00');
+    });
 });
 
 it('returns 422 when the branch has no payment_branch', function () {
@@ -126,4 +135,12 @@ it('renders the page for an authenticated user', function () {
     $this->actingAs(User::factory()->create())
         ->get(route('parrot-payments'))
         ->assertOk();
+});
+
+it('builds a restaurant business-day window (05:00 to next-day 05:00)', function () {
+    expect(App\Services\GcorePaymentsService::businessDayWindow('2026-05-01', '2026-05-31'))
+        ->toBe(['2026-05-01T05:00:00', '2026-06-01T05:00:00']);
+
+    expect(App\Services\GcorePaymentsService::businessDayWindow('2026-05-15', '2026-05-15'))
+        ->toBe(['2026-05-15T05:00:00', '2026-05-16T05:00:00']);
 });

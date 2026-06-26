@@ -45,4 +45,9 @@ return [
         'api_key' => env('GEMINI_API_KEY'),
     ],
 
+    'gcore' => [
+        'base_url' => env('GCORE_BASE_URL', 'http://gcorev26.test'),
+        'timeout' => (int) env('GCORE_TIMEOUT', 30),
+    ],
+
 ];

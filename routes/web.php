@@ -136,6 +136,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Reports
     Route::get('reports/transactions', [App\Http\Controllers\ReportController::class, 'transactions'])->name('reports.transactions');
     Route::get('reports/transactions/data', [App\Http\Controllers\ReportController::class, 'transactionsData'])->name('reports.transactions.data');
+
+    // gCore — Pagos Parrot POS por adquirente/sucursal
+    Route::get('gcore/branches/{branch}/parrot-order-payments', [App\Http\Controllers\GcorePaymentsController::class, 'parrotOrderPayments'])
+        ->name('gcore.parrot-order-payments');
 });
 
 require __DIR__.'/settings.php';

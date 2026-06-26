@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Enums\SettlementUploadStatus;
 use App\Models\SettlementUpload;
-use App\Services\Acquirer\AcquirerReconciliationService;
+use App\Services\Acquirer\SettlementIngestService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
@@ -24,7 +24,7 @@ class ProcessSettlementUpload implements ShouldQueue
     /**
      * Execute the job.
      */
-    public function handle(AcquirerReconciliationService $service): void
+    public function handle(SettlementIngestService $service): void
     {
         $lock = Cache::lock("settlement-upload-{$this->uploadId}", 300);
 
@@ -36,14 +36,15 @@ class ProcessSettlementUpload implements ShouldQueue
 
         try {
             $upload = SettlementUpload::findOrFail($this->uploadId);
-            $upload->update(['status' => SettlementUploadStatus::Matching, 'error_log' => null]);
+            $upload->update(['status' => SettlementUploadStatus::Parsing, 'error_log' => null]);
 
-            $result = $service->processUpload($upload);
+            $result = $service->ingestUpload($upload);
 
-            Log::info('Settlement upload reconciled', [
+            Log::info('Settlement upload ingested', [
                 'upload_id' => $this->uploadId,
                 'total' => $result->total,
-                'matched' => $result->matched,
+                'inserted' => $result->inserted,
+                'duplicates' => $result->duplicates,
             ]);
         } catch (\Throwable $e) {
             SettlementUpload::whereKey($this->uploadId)->update([

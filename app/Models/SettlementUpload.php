@@ -30,6 +30,8 @@ class SettlementUpload extends Model
         'period_end',
         'status',
         'total_rows',
+        'inserted_rows',
+        'duplicate_rows',
         'matched_rows',
         'unmatched_rows',
         'error_log',
@@ -47,6 +49,8 @@ class SettlementUpload extends Model
             'period_end' => 'date',
             'status' => SettlementUploadStatus::class,
             'total_rows' => 'integer',
+            'inserted_rows' => 'integer',
+            'duplicate_rows' => 'integer',
             'matched_rows' => 'integer',
             'unmatched_rows' => 'integer',
         ];

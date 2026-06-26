@@ -14,7 +14,7 @@ import { upload } from '@/routes/reconciliation';
 import { sap as pagosSap } from '@/routes/payments';
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
-import { ClipboardList, FileSearch, FileSpreadsheet, FileText, HandCoins, Landmark, LayoutGrid, Receipt, Wallet } from 'lucide-react';
+import { ClipboardList, FileSearch, FileSpreadsheet, FileText, HandCoins, Landmark, LayoutGrid, Receipt, ReceiptText, Wallet } from 'lucide-react';
 import AppLogo from './app-logo';
 
 const platformItems: NavItem[] = [
@@ -45,6 +45,11 @@ const cargasMasivasItems: NavItem[] = [
         title: 'Cobros de Clientes',
         href: '/payments/customers',
         icon: HandCoins,
+    },
+    {
+        title: 'Estados de Adquirente',
+        href: '/treasury/settlements',
+        icon: ReceiptText,
     },
 ];
 

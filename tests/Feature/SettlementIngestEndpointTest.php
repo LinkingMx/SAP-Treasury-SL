@@ -1,14 +1,13 @@
 <?php
 
-use App\Jobs\ProcessSettlementUpload;
 use App\Models\Acquirer;
 use App\Models\Branch;
+use App\Models\ExternalSettlement;
 use App\Models\SettlementUpload;
 use App\Models\User;
 use App\Services\Ai\SettlementLayoutAnalyzer;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 
 function ownerUserForBranch(Branch $branch): User
@@ -79,44 +78,66 @@ it('previews proposed matches without persisting', function () {
     expect(SettlementUpload::count())->toBe(0);
 });
 
-it('stores an upload and queues reconciliation', function () {
-    Queue::fake();
+it('ingests rows on upload and dedups on re-upload', function () {
     Storage::fake('local');
 
-    $acquirer = Acquirer::factory()->bank()->create();
-    $branch = Branch::factory()->create(['payment_branch' => 'Ichikani Metropolitan']);
+    $this->mock(SettlementLayoutAnalyzer::class, function ($mock) {
+        $mock->shouldReceive('analyze')->andReturn([
+            'parse_config' => ['columns' => ['transaction_date' => ['index' => 0], 'amount' => ['index' => 1]]],
+            'acquirer_guess' => 'RAPPI',
+            'fingerprint' => 'fp',
+        ]);
+        $mock->shouldReceive('parseRows')->andReturn([
+            ['transaction_date' => '2026-05-10', 'transaction_time' => null, 'amount' => 100.00, 'authorization' => 'A1', 'reference' => 'R1', 'raw' => []],
+            ['transaction_date' => '2026-05-12', 'transaction_time' => null, 'amount' => 200.00, 'authorization' => 'A2', 'reference' => 'R2', 'raw' => []],
+        ]);
+    });
+
+    $acquirer = Acquirer::factory()->delivery('Rappi')->create();
+    $branch = Branch::factory()->create();
     $user = ownerUserForBranch($branch);
 
-    $this->actingAs($user)
-        ->postJson(route('settlements.store'), [
-            'acquirer_id' => $acquirer->id,
-            'branch_id' => $branch->id,
-            'period_start' => '2026-05-01',
-            'period_end' => '2026-05-31',
-            'file' => UploadedFile::fake()->create('mifel.xlsx', 10),
-        ])
-        ->assertSuccessful()
-        ->assertJsonPath('success', true);
+    $payload = fn () => [
+        'acquirer_id' => $acquirer->id,
+        'branch_id' => $branch->id,
+        'file' => UploadedFile::fake()->create('rappi.xlsx', 10),
+    ];
 
-    expect(SettlementUpload::count())->toBe(1);
-    Queue::assertPushed(ProcessSettlementUpload::class);
+    // First upload inserts both rows.
+    $this->actingAs($user)
+        ->postJson(route('settlements.store'), $payload())
+        ->assertSuccessful()
+        ->assertJsonPath('upload.inserted_rows', 2)
+        ->assertJsonPath('upload.duplicate_rows', 0)
+        ->assertJsonPath('upload.period_start', '2026-05-10')
+        ->assertJsonPath('upload.period_end', '2026-05-12');
+
+    expect(ExternalSettlement::count())->toBe(2);
+
+    // Re-uploading the same rows inserts nothing (all duplicates).
+    $this->actingAs($user)
+        ->postJson(route('settlements.store'), $payload())
+        ->assertSuccessful()
+        ->assertJsonPath('upload.inserted_rows', 0)
+        ->assertJsonPath('upload.duplicate_rows', 2);
+
+    expect(ExternalSettlement::count())->toBe(2)
+        ->and(SettlementUpload::count())->toBe(2);
 });
 
-it('validates the period range', function () {
+it('blocks uploading to a branch the user does not own', function () {
     $acquirer = Acquirer::factory()->bank()->create();
-    $branch = Branch::factory()->create(['payment_branch' => 'X']);
-    $user = ownerUserForBranch($branch);
+    $branch = Branch::factory()->create();
+    $user = User::factory()->create(); // not attached
 
     $this->actingAs($user)
         ->postJson(route('settlements.store'), [
             'acquirer_id' => $acquirer->id,
             'branch_id' => $branch->id,
-            'period_start' => '2026-05-31',
-            'period_end' => '2026-05-01',
-            'file' => UploadedFile::fake()->create('mifel.xlsx', 10),
+            'file' => UploadedFile::fake()->create('rappi.xlsx', 10),
         ])
-        ->assertStatus(422)
-        ->assertJsonValidationErrors('period_end');
+        ->assertStatus(500)
+        ->assertJsonPath('success', false);
 });
 
 it('blocks previewing a branch the user does not own', function () {
@@ -142,7 +163,7 @@ it('shows upload status to an authorized user', function () {
     $user = ownerUserForBranch($branch);
     $upload = SettlementUpload::factory()->create([
         'branch_id' => $branch->id,
-        'matched_rows' => 5,
+        'inserted_rows' => 6,
         'total_rows' => 8,
     ]);
 
@@ -150,5 +171,5 @@ it('shows upload status to an authorized user', function () {
         ->getJson(route('settlements.show', $upload))
         ->assertSuccessful()
         ->assertJsonPath('upload.total_rows', 8)
-        ->assertJsonPath('upload.matched_rows', 5);
+        ->assertJsonPath('upload.inserted_rows', 6);
 });

@@ -3,17 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Enums\SettlementUploadStatus;
+use App\Http\Requests\SettlementIngestRequest;
 use App\Http\Requests\SettlementUploadRequest;
-use App\Jobs\ProcessSettlementUpload;
 use App\Models\Acquirer;
 use App\Models\Branch;
+use App\Models\ExternalSettlement;
 use App\Models\PaymentOrder;
 use App\Models\SettlementUpload;
 use App\Services\Acquirer\AcquirerMatcher;
+use App\Services\Acquirer\SettlementIngestService;
 use App\Services\Ai\SettlementLayoutAnalyzer;
 use App\Services\GcorePaymentsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class SettlementIngestController extends Controller
 {
@@ -21,7 +25,31 @@ class SettlementIngestController extends Controller
         protected SettlementLayoutAnalyzer $analyzer,
         protected GcorePaymentsService $gcore,
         protected AcquirerMatcher $matcher,
+        protected SettlementIngestService $ingest,
     ) {}
+
+    /**
+     * Render the acquirer settlement upload page.
+     */
+    public function index(): Response
+    {
+        $branchIds = auth()->user()->branches()->pluck('branches.id');
+
+        return Inertia::render('treasury/settlement-upload', [
+            'acquirers' => Acquirer::query()
+                ->where('active', true)
+                ->orderBy('name')
+                ->get(['id', 'code', 'name', 'kind']),
+            'branches' => auth()->user()->branches()->get(['branches.id', 'branches.name']),
+            'uploads' => SettlementUpload::query()
+                ->whereIn('branch_id', $branchIds)
+                ->with(['acquirer:id,code,name', 'branch:id,name'])
+                ->latest()
+                ->limit(50)
+                ->get()
+                ->map(fn (SettlementUpload $upload): array => $this->uploadPayload($upload)),
+        ]);
+    }
 
     /**
      * Detect the column layout of an uploaded settlement file (no persistence).
@@ -114,29 +142,52 @@ class SettlementIngestController extends Controller
     }
 
     /**
-     * Persist the upload and queue reconciliation.
+     * Upload an acquirer settlement file and dedup-ingest its rows. Synchronous:
+     * accumulates into external_settlements, skipping rows that already exist.
      */
-    public function store(SettlementUploadRequest $request): JsonResponse
+    public function store(SettlementIngestRequest $request): JsonResponse
     {
-        $path = $request->file('file')->store('settlements/'.date('Y/m'), 'local');
+        $file = $request->file('file');
+        $path = $file->store('settlements/'.date('Y/m'), 'local');
 
         $upload = SettlementUpload::create([
             'acquirer_id' => $request->integer('acquirer_id'),
             'branch_id' => $request->integer('branch_id'),
             'user_id' => $request->user()->id,
-            'original_name' => $request->file('file')->getClientOriginalName(),
+            'original_name' => $file->getClientOriginalName(),
             'stored_path' => $path,
-            'period_start' => $request->date('period_start'),
-            'period_end' => $request->date('period_end'),
-            'status' => SettlementUploadStatus::Pending,
+            'status' => SettlementUploadStatus::Parsing,
         ]);
 
-        ProcessSettlementUpload::dispatch($upload->id);
+        try {
+            $result = $this->ingest->ingestFromFile($upload, $file);
+        } catch (\Throwable $e) {
+            $upload->update(['status' => SettlementUploadStatus::Failed, 'error_log' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'No se pudo procesar el archivo: '.$e->getMessage(),
+            ], 422);
+        }
+
+        $sample = $upload->externalSettlements()
+            ->latest('id')
+            ->limit(10)
+            ->get(['transaction_date', 'amount', 'authorization', 'reference', 'card_type', 'status'])
+            ->map(fn (ExternalSettlement $row): array => [
+                'transaction_date' => $row->transaction_date?->format('Y-m-d'),
+                'amount' => (float) $row->amount,
+                'authorization' => $row->authorization,
+                'reference' => $row->reference,
+                'card_type' => $row->card_type,
+                'status' => $row->status,
+            ]);
 
         return response()->json([
             'success' => true,
-            'message' => 'Carga recibida. La conciliación se está procesando.',
-            'upload' => $this->uploadPayload($upload),
+            'message' => "Cargadas {$result->inserted} filas nuevas ({$result->duplicates} ya existían).",
+            'upload' => $this->uploadPayload($upload->fresh(['acquirer', 'branch'])),
+            'sample' => $sample,
         ]);
     }
 
@@ -164,11 +215,17 @@ class SettlementIngestController extends Controller
     {
         return [
             'uuid' => $upload->uuid,
+            'acquirer' => $upload->acquirer?->code,
+            'branch' => $upload->branch?->name,
+            'original_name' => $upload->original_name,
             'status' => $upload->status->value,
             'status_label' => $upload->status->label(),
             'total_rows' => $upload->total_rows,
-            'matched_rows' => $upload->matched_rows,
-            'unmatched_rows' => $upload->unmatched_rows,
+            'inserted_rows' => $upload->inserted_rows,
+            'duplicate_rows' => $upload->duplicate_rows,
+            'period_start' => $upload->period_start?->format('Y-m-d'),
+            'period_end' => $upload->period_end?->format('Y-m-d'),
+            'created_at' => $upload->created_at?->toIso8601String(),
             'error_log' => $upload->error_log,
         ];
     }

@@ -39,7 +39,28 @@ class ExternalSettlement extends Model
         'status',
         'match_status',
         'raw',
+        'row_hash',
     ];
+
+    /**
+     * Build the dedup hash for a parsed settlement row.
+     *
+     * Identifies a settlement transaction within an acquirer+branch so the same
+     * row is never re-inserted across overlapping uploads. The acquirer and
+     * branch are scoped by the unique index, not the hash.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    public static function hashFor(array $row): string
+    {
+        return md5(implode('|', [
+            (string) ($row['transaction_date'] ?? ''),
+            (string) ($row['transaction_time'] ?? ''),
+            number_format((float) ($row['amount'] ?? 0), 2, '.', ''),
+            strtoupper(trim((string) ($row['authorization'] ?? ''))),
+            strtoupper(trim((string) ($row['reference'] ?? ''))),
+        ]));
+    }
 
     /**
      * Get the attributes that should be cast.

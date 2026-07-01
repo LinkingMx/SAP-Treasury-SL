@@ -14,6 +14,9 @@ export function MarieFloater() {
 
     useEffect(() => {
         if (!isTarget) return;
+        // sessionStorage is client-only, so we resolve the dismissed state on mount
+        // (SSR renders nothing until then). This intentional post-mount setState is fine.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setDismissed(sessionStorage.getItem(STORAGE_KEY) === '1');
     }, [isTarget]);
 

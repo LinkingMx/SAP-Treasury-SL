@@ -132,7 +132,6 @@ export default function SettlementUpload({ acquirers, branches, uploads: initial
     const [remember, setRemember] = useState(true);
 
     const headers = useMemo(() => matrix[headerRow] ?? [], [matrix, headerRow]);
-    const sampleRows = useMemo(() => matrix.slice(headerRow + 1, headerRow + 6), [matrix, headerRow]);
     const canRead = acquirerId !== '' && branchId !== '' && file !== null && !busy;
     const canUpload = mapping.transaction_date != null && mapping.amount != null && !busy;
 

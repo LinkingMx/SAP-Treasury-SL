@@ -4,7 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { FilterField, FiltersCard } from '@/components/page/filters-card';
 import { InfoWidget } from '@/components/page/info-widget';
 import { Input } from '@/components/ui/input';
@@ -41,7 +41,6 @@ import {
     AlertTriangle,
     ArrowDownCircle,
     ArrowUpCircle,
-    Bot,
     Building2,
     CheckCircle2,
     Circle,

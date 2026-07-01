@@ -67,8 +67,9 @@ final class SettlementIngestService
                 ->flip();
 
             $seen = [];
-            $inserted = 0;
             $dates = [];
+            $now = now();
+            $pending = [];
 
             foreach ($rows as $index => $row) {
                 $hash = $hashes[$index];
@@ -79,7 +80,7 @@ final class SettlementIngestService
                 }
                 $seen[$hash] = true;
 
-                ExternalSettlement::create([
+                $pending[] = [
                     'upload_id' => $upload->id,
                     'acquirer_id' => $upload->acquirer_id,
                     'branch_id' => $upload->branch_id,
@@ -94,12 +95,21 @@ final class SettlementIngestService
                     'operation_type' => $row['operation_type'] ?? null,
                     'status' => $row['status'] ?? null,
                     'match_status' => ExternalSettlement::MATCH_UNMATCHED,
-                    'raw' => $row['raw'] ?? null,
+                    'raw' => isset($row['raw']) ? json_encode($row['raw']) : null,
                     'row_hash' => $hash,
-                ]);
-
-                $inserted++;
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
             }
+
+            // Bulk insert in chunks: one round-trip per ~500 rows instead of one
+            // per row. Critical on a remote DB (a per-row loop over thousands of
+            // rows blows past the request timeout).
+            foreach (array_chunk($pending, 500) as $chunk) {
+                ExternalSettlement::insert($chunk);
+            }
+
+            $inserted = count($pending);
 
             $periodStart = $dates === [] ? null : min($dates);
             $periodEnd = $dates === [] ? null : max($dates);

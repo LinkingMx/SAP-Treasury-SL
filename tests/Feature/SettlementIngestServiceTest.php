@@ -54,6 +54,22 @@ it('inserts new rows and derives the period from the rows', function () {
         ->and($upload->period_end->format('Y-m-d'))->toBe('2026-05-20');
 });
 
+it('bulk-inserts across chunk boundaries (more than 500 rows)', function () {
+    $upload = makeIngestUpload();
+
+    $rows = [];
+    for ($i = 0; $i < 1200; $i++) {
+        $rows[] = ingestRow('2026-05-'.str_pad((string) (($i % 28) + 1), 2, '0', STR_PAD_LEFT), 100 + $i, 'A'.$i, 'R'.$i);
+    }
+
+    $result = app(SettlementIngestService::class)->ingestRows($upload, $rows);
+
+    expect($result->total)->toBe(1200)
+        ->and($result->inserted)->toBe(1200)
+        ->and(ExternalSettlement::count())->toBe(1200)
+        ->and(ExternalSettlement::whereNotNull('created_at')->count())->toBe(1200);
+});
+
 it('skips rows already ingested for the same acquirer + branch', function () {
     $acquirer = Acquirer::factory()->delivery('Rappi')->create();
     $branch = Branch::factory()->create();

@@ -123,7 +123,7 @@ class SapServiceLayer
     public function createJournalEntry(
         Transaction $transaction,
         string $bankAccountCode,
-        string $ceco,
+        ?string $ceco,
         ?int $bplId
     ): array {
         if (! $this->sessionId) {
@@ -146,8 +146,10 @@ class SapServiceLayer
             'AccountCode' => $bankAccountCode,
             'Debit' => $creditAmount,
             'Credit' => $debitAmount,
-            'CostingCode' => $ceco,
         ];
+        if ($ceco !== null && $ceco !== '') {
+            $line1['CostingCode'] = $ceco;
+        }
         if ($bplId !== null && $bplId !== 0) {
             $line1['BPLID'] = $bplId;
         }
@@ -158,8 +160,10 @@ class SapServiceLayer
             'AccountCode' => $transaction->counterpart_account,
             'Debit' => $debitAmount,
             'Credit' => $creditAmount,
-            'CostingCode' => $ceco,
         ];
+        if ($ceco !== null && $ceco !== '') {
+            $line2['CostingCode'] = $ceco;
+        }
         if ($bplId !== null && $bplId !== 0) {
             $line2['BPLID'] = $bplId;
         }

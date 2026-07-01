@@ -126,30 +126,43 @@ class ProcessBatchToSapJob implements ShouldQueue
                 continue;
             }
 
-            $result = $sap->createJournalEntry(
-                transaction: $transaction,
-                bankAccountCode: $bankAccount->account,
-                ceco: $branch->ceco,
-                bplId: $bplId
-            );
+            try {
+                $result = $sap->createJournalEntry(
+                    transaction: $transaction,
+                    bankAccountCode: $bankAccount->account,
+                    ceco: $branch->ceco,
+                    bplId: $bplId
+                );
 
-            if ($result['success']) {
+                if ($result['success']) {
+                    $transaction->update([
+                        'sap_number' => $result['jdt_num'],
+                        'error' => null,
+                    ]);
+                    Log::info('Transaction processed successfully', [
+                        'transaction_id' => $transaction->id,
+                        'jdt_num' => $result['jdt_num'],
+                    ]);
+                } else {
+                    $transaction->update([
+                        'error' => $result['error'],
+                    ]);
+                    $hasErrors = true;
+                    Log::warning('Transaction processing failed', [
+                        'transaction_id' => $transaction->id,
+                        'error' => $result['error'],
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                // A single failing transaction must not brick the whole batch
+                // (leaving it stuck in "Procesando"). Mark it and keep going.
                 $transaction->update([
-                    'sap_number' => $result['jdt_num'],
-                    'error' => null,
-                ]);
-                Log::info('Transaction processed successfully', [
-                    'transaction_id' => $transaction->id,
-                    'jdt_num' => $result['jdt_num'],
-                ]);
-            } else {
-                $transaction->update([
-                    'error' => $result['error'],
+                    'error' => 'Error inesperado: '.$e->getMessage(),
                 ]);
                 $hasErrors = true;
-                Log::warning('Transaction processing failed', [
+                Log::error('Transaction processing threw an exception', [
                     'transaction_id' => $transaction->id,
-                    'error' => $result['error'],
+                    'error' => $e->getMessage(),
                 ]);
             }
         }

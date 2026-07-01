@@ -10,7 +10,6 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import {
     Dialog,
     DialogContent,
@@ -20,9 +19,8 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { InfoCell, StatCard } from '@/components/page/detail-bits';
-import { DollarSign, ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -60,7 +58,6 @@ import {
     type Batch,
     type BatchDetail,
     type BatchResult,
-    type BatchStatus,
     type Branch,
     type BreadcrumbItem,
     type ImportError,

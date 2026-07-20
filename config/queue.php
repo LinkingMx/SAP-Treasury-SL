@@ -40,7 +40,10 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            // Must stay LONGER than the longest job timeout, otherwise the queue
+            // re-dispatches a job that is still running (ProcessBatchToSapJob posts
+            // thousands of journal entries to SAP — a re-dispatch would duplicate them).
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 3600),
             'after_commit' => false,
         ],
 

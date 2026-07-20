@@ -72,6 +72,12 @@ class CustomerPaymentsImport implements ToCollection, WithHeadingRow
                 'processed_at' => now(),
             ]);
 
+            // Collect invoices grouped by customer, then bulk-insert in chunks: one
+            // round-trip per ~500 rows instead of one per row (a per-row loop over a
+            // large file blows past the request timeout on a remote DB).
+            $now = now();
+            $pending = [];
+
             foreach ($groupedByCustomer as $cardCode => $customerRows) {
                 $lineNum = 0;
 
@@ -80,7 +86,7 @@ class CustomerPaymentsImport implements ToCollection, WithHeadingRow
 
                     $processDateCarbon = Carbon::parse($this->processDate);
 
-                    CustomerPaymentInvoice::create([
+                    $pending[] = [
                         'batch_id' => $this->batch->id,
                         'card_code' => $rowArray['cardcode'],
                         'card_name' => $rowArray['cardname'] ?? null,
@@ -91,8 +97,14 @@ class CustomerPaymentsImport implements ToCollection, WithHeadingRow
                         'doc_entry' => (int) $rowArray['docnum'],
                         'invoice_type' => $rowArray['invoicetype'] ?? 'it_Invoice',
                         'sum_applied' => $this->parseAmount($rowArray['sumapplied']),
-                    ]);
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
                 }
+            }
+
+            foreach (array_chunk($pending, 500) as $chunk) {
+                CustomerPaymentInvoice::insert($chunk);
             }
         });
     }

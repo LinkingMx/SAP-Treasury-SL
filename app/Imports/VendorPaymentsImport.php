@@ -82,7 +82,12 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
                 'processed_at' => now(),
             ]);
 
-            // Create invoices grouped by vendor
+            // Collect invoices grouped by vendor, then bulk-insert in chunks: one
+            // round-trip per ~500 rows instead of one per row (a per-row loop over a
+            // large file blows past the request timeout on a remote DB).
+            $now = now();
+            $pending = [];
+
             foreach ($groupedByVendor as $cardCode => $vendorRows) {
                 $lineNum = 0;
 
@@ -91,7 +96,7 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
 
                     $processDateCarbon = Carbon::parse($this->processDate);
 
-                    VendorPaymentInvoice::create([
+                    $pending[] = [
                         'batch_id' => $this->batch->id,
                         'card_code' => $rowArray['cardcode'],
                         'card_name' => $rowArray['cardname'] ?? null,
@@ -103,8 +108,14 @@ class VendorPaymentsImport implements ToCollection, WithHeadingRow
                         'invoice_type' => $rowArray['invoicetype'] ?? 'it_PurchaseInvoice',
                         'sum_applied' => $this->parseAmount($rowArray['sumapplied']),
                         'proveedor_ref' => trim($rowArray['proveedorref']),
-                    ]);
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
                 }
+            }
+
+            foreach (array_chunk($pending, 500) as $chunk) {
+                VendorPaymentInvoice::insert($chunk);
             }
         });
     }

@@ -93,12 +93,17 @@ class TransactionsImport implements ToCollection, WithHeadingRow
                 'processed_at' => now(),
             ]);
 
-            // Create transactions
+            // Collect transactions, then bulk-insert them in chunks: one round-trip
+            // per ~500 rows instead of one per row. On a remote DB a per-row loop
+            // over a large file blows past the request timeout.
+            $now = now();
+            $pending = [];
+
             foreach ($rows as $row) {
                 $debitAmount = $this->parseAmount($row['debit_amount'] ?? null);
                 $creditAmount = $this->parseAmount($row['credit_amount'] ?? null);
 
-                Transaction::create([
+                $pending[] = [
                     'batch_id' => $this->batch->id,
                     'sequence' => (int) $row['sequence'],
                     'due_date' => $this->parseDate($row['duedate']),
@@ -106,10 +111,16 @@ class TransactionsImport implements ToCollection, WithHeadingRow
                     'debit_amount' => $debitAmount,
                     'credit_amount' => $creditAmount,
                     'counterpart_account' => trim($row['cuenta_contrapartida']),
-                ]);
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
 
                 $totalDebit += $debitAmount ?? 0;
                 $totalCredit += $creditAmount ?? 0;
+            }
+
+            foreach (array_chunk($pending, 500) as $chunk) {
+                Transaction::insert($chunk);
             }
 
             // Update batch totals

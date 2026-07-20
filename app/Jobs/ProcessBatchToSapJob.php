@@ -21,8 +21,12 @@ class ProcessBatchToSapJob implements ShouldQueue
 
     /**
      * The number of seconds the job can run before timing out.
+     *
+     * Each journal entry takes ~0.3s against SAP, so a large batch (1,000+ rows)
+     * needs several minutes. Must stay BELOW queue.connections.database.retry_after
+     * so the queue never re-dispatches a run that is still in flight.
      */
-    public int $timeout = 300;
+    public int $timeout = 1800;
 
     /**
      * Create a new job instance.

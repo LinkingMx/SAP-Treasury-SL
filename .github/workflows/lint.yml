@@ -38,6 +38,18 @@ jobs:
       - name: Lint Frontend
         run: npm run lint
 
+      # Wayfinder writes resources/js/{routes,actions}, which are gitignored, so
+      # tsc cannot resolve "@/routes" until they are generated. Mirrors the
+      # defensive setup the Dockerfile uses: an empty sqlite file and a file cache
+      # keep artisan from needing a real database while booting.
+      - name: Generate Wayfinder routes
+        run: |
+          cp .env.example .env
+          touch database/database.sqlite
+          sed -i '/^CACHE_STORE=/d' .env && echo 'CACHE_STORE=file' >> .env
+          php artisan key:generate
+          php artisan wayfinder:generate
+
       # Catches what ESLint and the Vite build do not: a handler wired with the
       # wrong signature, a null flowing into a non-nullable prop, etc.
       - name: Type Check Frontend

@@ -10,12 +10,88 @@ function parserCsv(): UploadedFile
     return UploadedFile::fake()->createWithContent('rappi.csv', $content);
 }
 
+/**
+ * A bank export shaped like the real MIFEL one: a BOM, several preamble lines
+ * (one of which contains a pipe), the real header further down, and a legal
+ * footer after the data.
+ */
+function mifelStyleCsv(): UploadedFile
+{
+    $content = "\xEF\xBB\xBFMifel Empresas| Detalle de afiliación\n"
+        ."Fecha de descarga: 30/06/2026 15:45 hrs\n"
+        ."\n"
+        ."Núm. de cliente:, 7029167\n"
+        ."Nombre de comercio:, MOCHOMOS ARCOS BOSQUES\n"
+        ."\n"
+        ."Fecha de aplicación,Tipo de tarjeta,Tipo de operación,Monto,Fecha transacción,Hora transacción,Núm. de autorización,Núm. de referencia,Estatus\n"
+        ."30/06/2026,CREDITO,VENTA,3768.55,29/06/2026,17:36:35,840512,00109314797,Aplicado\n"
+        ."30/06/2026,DEBITO,VENTA,1672.00,29/06/2026,22:05:35,737431,00209314797,Aplicado\n"
+        ."\n"
+        ."2026 Banca Mifel S.A | Institucion de Banca Multiple\n";
+
+    return UploadedFile::fake()->createWithContent('mifel.csv', $content);
+}
+
 it('reads headers and detects the header row + delimiter', function () {
     $read = (new SettlementParser)->readHeaders(parserCsv());
 
     expect($read['header_row'])->toBe(0)
         ->and($read['delimiter'])->toBe(',')
         ->and($read['rows'][0])->toBe(['Fecha', 'Autorizacion', 'Monto']);
+});
+
+it('picks the delimiter most lines agree on, not the one in a preamble', function () {
+    // The first line contains a pipe; judging by it alone chose "|" and collapsed
+    // every data row into a single column.
+    $read = (new SettlementParser)->readHeaders(mifelStyleCsv());
+
+    expect($read['delimiter'])->toBe(',');
+});
+
+it('finds the header row below a preamble and strips the BOM', function () {
+    $read = (new SettlementParser)->readHeaders(mifelStyleCsv());
+
+    expect($read['header_row'])->toBe(6)
+        ->and($read['rows'][6][0])->toBe('Fecha de aplicación')
+        ->and($read['rows'][0][0])->toStartWith('Mifel Empresas'); // sin BOM al frente
+});
+
+it('parses a preamble+footer file and reports what it skipped', function () {
+    $result = (new SettlementParser)->parseWithDiagnostics(mifelStyleCsv(), [
+        'header_lines_count' => 7,
+        'columns' => [
+            'transaction_date' => ['index' => 4, 'format' => 'DD/MM/YYYY'],
+            'transaction_time' => ['index' => 5],
+            'amount' => ['index' => 3],
+            'authorization' => ['index' => 6],
+            'status' => ['index' => 8],
+        ],
+    ]);
+
+    expect($result['rows'])->toHaveCount(2)
+        ->and($result['skipped_rows'])->toBe(1)
+        ->and($result['skipped'][0]['reason'])->toContain('fecha')
+        ->and($result['rows'][0]['transaction_date'])->toBe('2026-06-29')
+        ->and($result['rows'][0]['transaction_time'])->toBe('17:36:35')
+        ->and($result['rows'][0]['amount'])->toBe(3768.55)
+        ->and($result['rows'][0]['authorization'])->toBe('840512');
+});
+
+it('honours an explicit delimiter instead of re-detecting one', function () {
+    $content = "Fecha;Monto\n10/05/2026;1100.00\n";
+    $file = UploadedFile::fake()->createWithContent('semi.csv', $content);
+
+    $rows = (new SettlementParser)->parseRows($file, [
+        'header_lines_count' => 1,
+        'delimiter' => ';',
+        'columns' => [
+            'transaction_date' => ['index' => 0, 'format' => 'DD/MM/YYYY'],
+            'amount' => ['index' => 1],
+        ],
+    ]);
+
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]['amount'])->toBe(1100.0);
 });
 
 it('suggests a mapping from header aliases', function () {

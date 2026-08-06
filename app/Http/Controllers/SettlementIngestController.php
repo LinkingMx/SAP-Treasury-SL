@@ -50,23 +50,64 @@ class SettlementIngestController extends Controller
      */
     public function headers(SettlementHeadersRequest $request): JsonResponse
     {
-        $read = $this->parser->readHeaders($request->file('file'));
+        // An explicit delimiter means the user is correcting our guess.
+        $read = $this->parser->readHeaders(
+            $request->file('file'),
+            delimiter: $request->filled('delimiter') ? (string) $request->input('delimiter') : null,
+        );
 
         $savedMap = $request->filled('acquirer_id')
             ? Acquirer::find($request->integer('acquirer_id'))?->column_map
             : null;
 
-        $suggestedHeaderRow = $savedMap['header_row'] ?? $read['header_row'];
-        $headerRow = $read['rows'][$suggestedHeaderRow] ?? ($read['rows'][$read['header_row']] ?? []);
+        // Header row and delimiter are properties of THIS file (the same acquirer
+        // ships xlsx and csv with different layouts), so detection wins. The saved
+        // map still drives the column mapping, which is matched by header name.
+        $headerRow = $read['rows'][$read['header_row']] ?? [];
 
         return response()->json([
             'success' => true,
             'rows' => $read['rows'],
-            'header_row' => $suggestedHeaderRow,
-            'delimiter' => $savedMap['delimiter'] ?? $read['delimiter'],
+            'header_row' => $read['header_row'],
+            'delimiter' => $read['delimiter'],
             'headers' => $headerRow,
             'suggested_mapping' => $this->parser->suggestMapping($headerRow, $savedMap),
             'suggested_format' => $savedMap['columns']['transaction_date']['format'] ?? 'DD/MM/YYYY',
+        ]);
+    }
+
+    /**
+     * Parse the file with the user's current mapping WITHOUT saving anything, so
+     * the UI can show the values it would actually import. Runs the same
+     * parseWithDiagnostics() the real ingest uses, so the preview cannot lie.
+     */
+    public function preview(SettlementHeadersRequest $request): JsonResponse
+    {
+        $parseConfig = $request->input('parse_config');
+        if (is_string($parseConfig)) {
+            $parseConfig = json_decode($parseConfig, true);
+        }
+
+        if (! is_array($parseConfig)) {
+            return response()->json(['success' => false, 'error' => 'Falta la configuración de columnas.'], 422);
+        }
+
+        try {
+            $result = $this->parser->parseWithDiagnostics($request->file('file'), $parseConfig);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'error' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'total_rows' => $result['total_rows'],
+            'parsed_rows' => count($result['rows']),
+            'skipped_rows' => $result['skipped_rows'],
+            'skipped' => $result['skipped'],
+            'sample' => array_map(
+                static fn (array $row): array => collect($row)->except('raw')->all(),
+                array_slice($result['rows'], 0, 5),
+            ),
         ]);
     }
 

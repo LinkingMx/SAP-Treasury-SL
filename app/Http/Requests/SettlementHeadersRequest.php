@@ -24,6 +24,7 @@ class SettlementHeadersRequest extends FormRequest
         return [
             'file' => ['required', 'file', 'extensions:xlsx,xls,csv', 'max:40960'],
             'acquirer_id' => ['nullable', 'exists:acquirers,id'],
+            'delimiter' => ['nullable', 'string', 'max:4'],
         ];
     }
 

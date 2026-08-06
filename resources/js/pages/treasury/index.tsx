@@ -41,6 +41,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
+import { normalizeImportErrors } from '@/lib/import-errors';
 import { BatchStatusBadge } from '@/components/page/batch-status-badge';
 import { ColumnVisibilityMenu } from '@/components/page/column-visibility-menu';
 import { FilterField, FiltersCard } from '@/components/page/filters-card';
@@ -482,13 +483,7 @@ export default function Tesoreria({ branches, bankAccounts, banks }: Props) {
             } else {
                 setUploadStatus('error');
                 // Handle both validation errors and general errors
-                if (data.errors && Array.isArray(data.errors)) {
-                    setErrors(data.errors);
-                } else if (data.message) {
-                    setErrors([{ row: 0, error: data.message }]);
-                } else {
-                    setErrors([{ row: 0, error: 'Error desconocido al procesar el archivo' }]);
-                }
+                setErrors(normalizeImportErrors(data));
             }
         } catch (err) {
             setUploadStatus('error');

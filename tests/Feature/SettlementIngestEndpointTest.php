@@ -36,6 +36,58 @@ function mappingParseConfig(): string
     ]);
 }
 
+it('previews what would be imported without saving anything', function () {
+    $user = User::factory()->create();
+
+    $json = $this->actingAs($user)
+        ->post(route('settlements.preview'), [
+            'file' => settlementCsv(),
+            'parse_config' => mappingParseConfig(),
+        ])
+        ->assertSuccessful()
+        ->json();
+
+    expect($json['success'])->toBeTrue()
+        ->and($json['total_rows'])->toBe(2)
+        ->and($json['parsed_rows'])->toBe(2)
+        ->and($json['skipped_rows'])->toBe(0)
+        ->and($json['sample'][0]['transaction_date'])->toBe('2026-05-10')
+        ->and((float) $json['sample'][0]['amount'])->toBe(100.0)
+        // The preview must never write.
+        ->and(SettlementUpload::count())->toBe(0)
+        ->and(ExternalSettlement::count())->toBe(0);
+});
+
+it('reports rows the mapping cannot parse instead of failing outright', function () {
+    $user = User::factory()->create();
+    $file = UploadedFile::fake()->createWithContent(
+        'mixed.csv',
+        "Fecha,Autorizacion,Monto\n10/05/2026,A1,100.00\nTotal general,,\n",
+    );
+
+    $json = $this->actingAs($user)
+        ->post(route('settlements.preview'), ['file' => $file, 'parse_config' => mappingParseConfig()])
+        ->assertSuccessful()
+        ->json();
+
+    expect($json['parsed_rows'])->toBe(1)
+        ->and($json['skipped_rows'])->toBe(1)
+        ->and($json['skipped'][0]['line'])->toBe(3)
+        ->and($json['skipped'][0]['reason'])->toContain('fecha');
+});
+
+it('rejects a preview without a column mapping', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('settlements.preview'), [
+            'file' => settlementCsv(),
+            'parse_config' => json_encode(['columns' => []]),
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('success', false);
+});
+
 it('reads headers and suggests a mapping', function () {
     $acquirer = Acquirer::factory()->delivery('Rappi')->create();
     $user = User::factory()->create();

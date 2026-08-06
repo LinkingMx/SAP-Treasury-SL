@@ -96,6 +96,8 @@ interface Props {
     cash?: CashData | UnavailableData;
     payables?: AgingData | UnavailableData;
     receivables?: AgingData | UnavailableData;
+    // Inertia's usePage<T>() requires an index signature, same as SharedData.
+    [key: string]: unknown;
 }
 
 const BUCKET_LABELS: Record<AgingBucketKey, string> = {

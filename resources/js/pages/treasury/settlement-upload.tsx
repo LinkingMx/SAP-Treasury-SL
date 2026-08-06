@@ -440,7 +440,7 @@ export default function SettlementUpload({
                             </p>
                             <div className="flex justify-end pt-1">
                                 <Button
-                                    onClick={handleReadHeaders}
+                                    onClick={() => void handleReadHeaders()}
                                     disabled={!canRead}
                                 >
                                     {busy ? (

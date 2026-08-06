@@ -389,7 +389,7 @@ export default function BankStatementUpload({ branches, bankAccounts, onStatemen
             // Show detected bank info
             setProgressInfo((prev) => ({
                 ...prev,
-                bankName: analyzeData.bank_name_guess,
+                bankName: analyzeData.bank_name_guess ?? undefined,
                 columnDescription: analyzeData.parse_config?.column_description,
             }));
             updateStep(1, 'complete', `Banco: ${analyzeData.bank_name_guess}`);

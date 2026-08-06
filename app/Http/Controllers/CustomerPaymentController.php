@@ -52,8 +52,13 @@ class CustomerPaymentController extends Controller
             'process_date' => 'required|date',
             'file' => 'required|file|mimes:xlsx,xls|max:10240',
         ], [
+            'branch_id.required' => 'Debe seleccionar una sucursal.',
+            'bank_account_id.required' => 'Debe seleccionar una cuenta bancaria.',
             'process_date.required' => 'La fecha de proceso es obligatoria.',
             'process_date.date' => 'La fecha de proceso no es valida.',
+            'file.required' => 'Debe seleccionar un archivo Excel.',
+            'file.mimes' => 'El archivo debe ser un Excel (.xlsx o .xls). Si tienes un CSV, ábrelo en Excel y guárdalo como .xlsx.',
+            'file.max' => 'El archivo no debe superar 10MB.',
         ]);
 
         $file = $request->file('file');

@@ -61,19 +61,25 @@ class SettlementParser
     ];
 
     /**
+     * How many lines to sample when detecting the delimiter. Bank exports often
+     * open with a few preamble lines, so a single line is not enough to judge.
+     */
+    private const DETECTION_LINES = 30;
+
+    /**
      * Read the first rows of a file as a matrix so the UI can build a mapping.
      * Only the first $maxRows rows are loaded (memory-safe on large files).
      *
      * @return array{rows: array<int, array<int, string>>, header_row: int, delimiter: string}
      */
-    public function readHeaders(UploadedFile $file, int $maxRows = 12): array
+    public function readHeaders(UploadedFile $file, int $maxRows = 12, ?string $delimiter = null): array
     {
-        $rows = $this->readMatrix($file, $maxRows);
+        $rows = $this->readMatrix($file, $maxRows, $delimiter);
 
         return [
             'rows' => $rows,
             'header_row' => $this->detectHeaderRow($rows),
-            'delimiter' => $this->delimiterFor($file),
+            'delimiter' => $delimiter ?? $this->delimiterFor($file),
         ];
     }
 
@@ -135,6 +141,27 @@ class SettlementParser
      */
     public function parseRows(UploadedFile $file, array $parseConfig): array
     {
+        $result = $this->parseWithDiagnostics($file, $parseConfig);
+
+        if ($result['rows'] === []) {
+            throw new \RuntimeException('No se pudieron extraer renglones del archivo con el mapeo indicado.');
+        }
+
+        Log::info('Settlement manual extraction complete', ['count' => count($result['rows'])]);
+
+        return $result['rows'];
+    }
+
+    /**
+     * Same extraction as parseRows(), but also reports what was skipped and why.
+     * The upload preview calls this so it shows exactly what the real ingest will
+     * do — a preview built on different logic would eventually lie.
+     *
+     * @param  array{header_lines_count?: int, delimiter?: string, columns: array<string, array{index?: int, format?: string}>}  $parseConfig
+     * @return array{rows: array<int, array<string, mixed>>, total_rows: int, skipped_rows: int, skipped: array<int, array{line: int, reason: string, preview: string}>}
+     */
+    public function parseWithDiagnostics(UploadedFile $file, array $parseConfig): array
+    {
         $columns = $parseConfig['columns'] ?? [];
 
         $dateIndex = $columns['transaction_date']['index'] ?? null;
@@ -145,29 +172,43 @@ class SettlementParser
             throw new \RuntimeException('El mapeo debe incluir al menos la fecha y el monto.');
         }
 
-        $matrix = $this->readMatrix($file);
+        $matrix = $this->readMatrix($file, null, $parseConfig['delimiter'] ?? null);
         $headerLinesCount = (int) ($parseConfig['header_lines_count'] ?? 0);
 
         $rows = [];
+        $skipped = [];
+        $skippedCount = 0;
+        $total = 0;
 
-        foreach (array_slice($matrix, $headerLinesCount) as $fields) {
+        $skip = function (int $offset, array $fields, string $reason) use ($headerLinesCount, &$skipped, &$skippedCount): void {
+            $skippedCount++;
+            if (count($skipped) < 10) {
+                $skipped[] = [
+                    'line' => $headerLinesCount + $offset + 1,
+                    'reason' => $reason,
+                    'preview' => mb_substr(trim(implode(' | ', array_filter($fields, static fn ($c): bool => trim((string) $c) !== ''))), 0, 120),
+                ];
+            }
+        };
+
+        foreach (array_slice($matrix, $headerLinesCount) as $offset => $fields) {
             if (trim(implode('', $fields)) === '') {
                 continue;
             }
 
-            if (! isset($fields[$dateIndex])) {
-                continue;
-            }
-            $date = $this->parseDate(trim($fields[$dateIndex]), $dateFormat);
+            $total++;
+
+            $date = isset($fields[$dateIndex]) ? $this->parseDate(trim($fields[$dateIndex]), $dateFormat) : null;
             if ($date === null) {
+                $skip($offset, $fields, 'Sin fecha válida en la columna mapeada');
+
                 continue;
             }
 
-            if (! isset($fields[$amountIndex])) {
-                continue;
-            }
-            $amount = $this->cleanAmount(trim($fields[$amountIndex]));
+            $amount = isset($fields[$amountIndex]) ? $this->cleanAmount(trim($fields[$amountIndex])) : null;
             if ($amount === null || $amount == 0.0) {
+                $skip($offset, $fields, 'Sin monto válido en la columna mapeada');
+
                 continue;
             }
 
@@ -193,13 +234,12 @@ class SettlementParser
             ];
         }
 
-        if (empty($rows)) {
-            throw new \RuntimeException('No se pudieron extraer renglones del archivo con el mapeo indicado.');
-        }
-
-        Log::info('Settlement manual extraction complete', ['count' => count($rows)]);
-
-        return $rows;
+        return [
+            'rows' => $rows,
+            'total_rows' => $total,
+            'skipped_rows' => $skippedCount,
+            'skipped' => $skipped,
+        ];
     }
 
     /**
@@ -209,7 +249,7 @@ class SettlementParser
      *
      * @return array<int, array<int, string>>
      */
-    private function readMatrix(UploadedFile $file, ?int $maxRows = null): array
+    private function readMatrix(UploadedFile $file, ?int $maxRows = null, ?string $delimiter = null): array
     {
         $extension = strtolower($file->getClientOriginalExtension());
 
@@ -242,6 +282,28 @@ class SettlementParser
             );
         }
 
+        // Always sample enough lines to detect the delimiter reliably, even when
+        // the caller only wants the first few rows for a header preview.
+        $lines = $this->readLines($file, $maxRows === null ? null : max($maxRows, self::DETECTION_LINES));
+
+        $delimiter ??= $this->detectDelimiter($lines);
+
+        $rows = array_map(
+            fn (string $line): array => array_map(static fn ($cell): string => trim((string) $cell), $this->splitLine($line, $delimiter)),
+            $lines,
+        );
+
+        return $maxRows === null ? $rows : array_slice($rows, 0, $maxRows);
+    }
+
+    /**
+     * Read raw lines from a text file, stripping the UTF-8 BOM so the first
+     * header does not carry an invisible prefix that breaks mapping lookups.
+     *
+     * @return array<int, string>
+     */
+    private function readLines(UploadedFile $file, ?int $limit = null): array
+    {
         $lines = [];
         $handle = fopen($file->getPathname(), 'r');
         if ($handle === false) {
@@ -249,18 +311,17 @@ class SettlementParser
         }
         while (($line = fgets($handle)) !== false) {
             $lines[] = rtrim($line, "\r\n");
-            if ($maxRows !== null && count($lines) >= $maxRows) {
+            if ($limit !== null && count($lines) >= $limit) {
                 break;
             }
         }
         fclose($handle);
 
-        $delimiter = $this->detectDelimiter($lines);
+        if (isset($lines[0])) {
+            $lines[0] = preg_replace('/^\xEF\xBB\xBF/', '', $lines[0]) ?? $lines[0];
+        }
 
-        return array_map(
-            fn (string $line): array => array_map(static fn ($cell): string => trim((string) $cell), $this->splitLine($line, $delimiter)),
-            $lines,
-        );
+        return $lines;
     }
 
     /**
@@ -293,13 +354,7 @@ class SettlementParser
             return "\t";
         }
 
-        $handle = fopen($file->getPathname(), 'r');
-        $first = $handle ? rtrim((string) fgets($handle), "\r\n") : '';
-        if ($handle) {
-            fclose($handle);
-        }
-
-        return $this->detectDelimiter([$first]);
+        return $this->detectDelimiter($this->readLines($file, self::DETECTION_LINES));
     }
 
     /**
@@ -319,21 +374,47 @@ class SettlementParser
      */
     private function detectDelimiter(array $lines): string
     {
-        $firstNonEmpty = '';
+        $sample = [];
         foreach ($lines as $line) {
             if (trim($line) !== '') {
-                $firstNonEmpty = $line;
-
+                $sample[] = $line;
+            }
+            if (count($sample) >= self::DETECTION_LINES) {
                 break;
             }
         }
 
+        if ($sample === []) {
+            return ',';
+        }
+
+        // The real delimiter is the one that splits most lines into the SAME
+        // number of columns. Judging by a single line lets a stray character in a
+        // preamble ("Mifel Empresas| Detalle...") win over the actual delimiter.
         $best = ',';
-        $bestCount = 0;
+        $bestLines = 0;
+        $bestWidth = 0;
+
         foreach ([',', ';', "\t", '|'] as $candidate) {
-            $count = count($this->splitLine($firstNonEmpty, $candidate));
-            if ($count > $bestCount) {
-                $bestCount = $count;
+            $widths = [];
+            foreach ($sample as $line) {
+                $width = count($this->splitLine($line, $candidate));
+                if ($width >= 2) {
+                    $widths[$width] = ($widths[$width] ?? 0) + 1;
+                }
+            }
+
+            if ($widths === []) {
+                continue;
+            }
+
+            arsort($widths);
+            $modalWidth = (int) array_key_first($widths);
+            $modalLines = $widths[$modalWidth];
+
+            if ($modalLines > $bestLines || ($modalLines === $bestLines && $modalWidth > $bestWidth)) {
+                $bestLines = $modalLines;
+                $bestWidth = $modalWidth;
                 $best = $candidate;
             }
         }
@@ -348,14 +429,79 @@ class SettlementParser
      */
     private function detectHeaderRow(array $rows): int
     {
+        // Data rows define the table's real width; preamble lines are narrower.
+        $widths = [];
+        foreach ($rows as $cells) {
+            $width = count(array_filter($cells, static fn ($c): bool => trim((string) $c) !== ''));
+            if ($width >= 2) {
+                $widths[$width] = ($widths[$width] ?? 0) + 1;
+            }
+        }
+        arsort($widths);
+        $modalWidth = $widths === [] ? 0 : (int) array_key_first($widths);
+
+        $fallback = null;
+        $bestIndex = null;
+        $bestScore = PHP_INT_MIN;
+
         foreach ($rows as $index => $cells) {
             $nonEmpty = array_filter($cells, static fn ($c): bool => trim((string) $c) !== '');
-            if (count($nonEmpty) >= 2) {
-                return $index;
+            if (count($nonEmpty) < 2) {
+                continue;
+            }
+            $fallback ??= $index;
+
+            $score = 0;
+            foreach ($nonEmpty as $cell) {
+                $value = trim((string) $cell);
+                $normalized = $this->normalize($value);
+
+                // Numbers, dates and amounts mark a data row, never a header.
+                if ($this->looksLikeData($value)) {
+                    $score -= 3;
+
+                    continue;
+                }
+
+                foreach (self::ALIASES as $aliases) {
+                    foreach ($aliases as $alias) {
+                        if (str_contains($normalized, $alias)) {
+                            $score += 10;
+
+                            break 2;
+                        }
+                    }
+                }
+            }
+
+            // A header spans the whole table; "Núm. de cliente:, 7029167" does not.
+            if ($modalWidth > 0 && count($nonEmpty) >= $modalWidth) {
+                $score += 5;
+            }
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestIndex = $index;
             }
         }
 
-        return 0;
+        return $bestIndex ?? $fallback ?? 0;
+    }
+
+    /**
+     * Whether a cell looks like data (number, amount or date) rather than a label.
+     */
+    private function looksLikeData(string $value): bool
+    {
+        if ($value === '') {
+            return false;
+        }
+
+        $cleaned = str_replace([',', '$', ' '], '', $value);
+
+        return is_numeric($cleaned)
+            || preg_match('#^\d{1,4}[/-]\d{1,2}[/-]\d{1,4}#', $value) === 1
+            || preg_match('#^\d{1,2}:\d{2}#', $value) === 1;
     }
 
     /**

@@ -50,6 +50,7 @@ import {
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import AppLayout from '@/layouts/app-layout';
+import { normalizeImportErrors } from '@/lib/import-errors';
 import { sap as pagosSap } from '@/routes/payments';
 import type {
     BankAccount,
@@ -449,13 +450,7 @@ export default function PagosSap({ branches, bankAccounts, activityData = {} }: 
                 fetchBatches(1);
             } else {
                 setUploadStatus('error');
-                if (data.errors && Array.isArray(data.errors)) {
-                    setErrors(data.errors);
-                } else if (data.message) {
-                    setErrors([{ row: 0, error: data.message }]);
-                } else {
-                    setErrors([{ row: 0, error: 'Error desconocido al procesar el archivo' }]);
-                }
+                setErrors(normalizeImportErrors(data));
             }
         } catch (err) {
             setUploadStatus('error');

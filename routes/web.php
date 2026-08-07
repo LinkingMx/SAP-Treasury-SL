@@ -152,6 +152,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/', [App\Http\Controllers\SettlementIngestController::class, 'index'])->name('index');
         Route::post('headers', [App\Http\Controllers\SettlementIngestController::class, 'headers'])->name('headers');
         Route::post('preview', [App\Http\Controllers\SettlementIngestController::class, 'preview'])->name('preview');
+        Route::post('assist', [App\Http\Controllers\SettlementIngestController::class, 'assist'])->name('assist');
         Route::post('/', [App\Http\Controllers\SettlementIngestController::class, 'store'])->name('store');
         Route::get('{upload}', [App\Http\Controllers\SettlementIngestController::class, 'show'])->name('show');
     });

@@ -277,7 +277,7 @@ class SettlementParser
             $data = $reader->load($file->getPathname())->getActiveSheet()->toArray(null, false, false, false);
 
             return array_map(
-                static fn ($row): array => array_map(static fn ($cell): string => trim((string) ($cell ?? '')), (array) $row),
+                fn ($row): array => array_map(fn ($cell): string => $this->toUtf8(trim((string) ($cell ?? ''))), (array) $row),
                 $data,
             );
         }
@@ -321,7 +321,27 @@ class SettlementParser
             $lines[0] = preg_replace('/^\xEF\xBB\xBF/', '', $lines[0]) ?? $lines[0];
         }
 
-        return $lines;
+        return array_map(fn (string $line): string => $this->toUtf8($line), $lines);
+    }
+
+    /**
+     * Coerce text to UTF-8.
+     *
+     * Bank exports are routinely Windows-1252 (AFIRME ships "Número" as a raw
+     * 0xFA byte). Those bytes make json_encode() fail outright — the read/preview
+     * endpoints return nothing, and the JSON `raw` column cannot be written — so
+     * the text has to be normalized at the point where it is read.
+     *
+     * Only invalid UTF-8 is converted: re-encoding valid UTF-8 would double-encode
+     * it and produce the classic "Ã³" mojibake.
+     */
+    private function toUtf8(string $value): string
+    {
+        if ($value === '' || mb_check_encoding($value, 'UTF-8')) {
+            return $value;
+        }
+
+        return mb_convert_encoding($value, 'UTF-8', 'Windows-1252');
     }
 
     /**

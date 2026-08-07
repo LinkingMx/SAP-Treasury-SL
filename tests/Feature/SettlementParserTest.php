@@ -77,6 +77,33 @@ it('parses a preamble+footer file and reports what it skipped', function () {
         ->and($result['rows'][0]['authorization'])->toBe('840512');
 });
 
+it('reads Windows-1252 files so the response can be JSON encoded (AFIRME)', function () {
+    // AFIRME ships Latin-1: "Número"/"Importe" arrive as raw 0xFA/0xF3 bytes.
+    // Those make json_encode() fail outright, which broke the read endpoint and
+    // would also block writing the JSON `raw` column.
+    $content = mb_convert_encoding(
+        "Comercio,Número de Tarjeta,Fecha Venta,Importe\n9298930,493172XXXX7391,01/06/26,4750.00\n",
+        'Windows-1252',
+        'UTF-8',
+    );
+    $file = UploadedFile::fake()->createWithContent('afirme.csv', $content);
+
+    $read = (new SettlementParser)->readHeaders($file);
+    $headers = $read['rows'][$read['header_row']];
+
+    expect($headers[1])->toBe('Número de Tarjeta')
+        ->and(mb_check_encoding($headers[1], 'UTF-8'))->toBeTrue()
+        ->and(json_encode($read['rows']))->not->toBeFalse();
+});
+
+it('does not double-encode a file that is already UTF-8', function () {
+    $file = UploadedFile::fake()->createWithContent('utf8.csv', "Fecha,Número,Monto\n01/06/2026,ó,10\n");
+
+    $read = (new SettlementParser)->readHeaders($file);
+
+    expect($read['rows'][0][1])->toBe('Número');
+});
+
 it('honours an explicit delimiter instead of re-detecting one', function () {
     $content = "Fecha;Monto\n10/05/2026;1100.00\n";
     $file = UploadedFile::fake()->createWithContent('semi.csv', $content);

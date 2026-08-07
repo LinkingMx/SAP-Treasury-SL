@@ -48,7 +48,7 @@ jobs:
           touch database/database.sqlite
           sed -i '/^CACHE_STORE=/d' .env && echo 'CACHE_STORE=file' >> .env
           php artisan key:generate
-          php artisan wayfinder:generate
+          php artisan wayfinder:generate --with-form
 
       # Catches what ESLint and the Vite build do not: a handler wired with the
       # wrong signature, a null flowing into a non-nullable prop, etc.

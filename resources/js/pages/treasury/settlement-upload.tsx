@@ -23,11 +23,13 @@ import { cn } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
 import {
+    AlertTriangle,
     ArrowLeft,
     CheckCircle2,
     Filter,
     Loader2,
     ReceiptText,
+    Sparkles,
     Table2,
     Upload,
     X,
@@ -106,6 +108,29 @@ interface HeadersResponse {
     headers: string[];
     suggested_mapping: Record<string, number | null>;
     suggested_format: string;
+    fingerprint: string;
+    mapping_source: 'learned' | 'acquirer' | 'aliases';
+    layout_label: string | null;
+}
+
+interface AssistColumn {
+    index: number;
+    confidence: number;
+    why: string;
+}
+
+interface GlossaryEntry {
+    index: number;
+    header: string;
+    meaning: string;
+}
+
+interface AssistResponse {
+    available: boolean;
+    message?: string;
+    columns?: Record<string, AssistColumn>;
+    warnings?: string[];
+    glossary?: GlossaryEntry[];
 }
 
 interface StoreResponse {
@@ -129,6 +154,7 @@ interface PreviewResponse {
     skipped_rows: number;
     skipped: SkippedRow[];
     sample: Record<string, string | number | null>[];
+    warnings: { field: string; level: string; message: string }[];
 }
 
 interface Props {
@@ -200,6 +226,12 @@ export default function SettlementUpload({
     const [preview, setPreview] = useState<PreviewResponse | null>(null);
     const [previewing, setPreviewing] = useState(false);
     const [showSkipped, setShowSkipped] = useState(false);
+    const [fingerprint, setFingerprint] = useState('');
+    const [mappingSource, setMappingSource] = useState<'learned' | 'acquirer' | 'aliases'>('aliases');
+    const [assist, setAssist] = useState<AssistResponse | null>(null);
+    const [asking, setAsking] = useState(false);
+    const [assistApplied, setAssistApplied] = useState(false);
+    const [showGlossary, setShowGlossary] = useState(false);
 
     const headers = useMemo(() => matrix[headerRow] ?? [], [matrix, headerRow]);
     const canRead =
@@ -218,8 +250,16 @@ export default function SettlementUpload({
             columns[key] = { index: idx, header: headers[idx] ?? '' };
             if (key === 'transaction_date') columns[key].format = dateFormat;
         }
-        return { columns, header_lines_count: headerRow + 1, delimiter };
-    }, [mapping, headers, dateFormat, headerRow, delimiter]);
+        return {
+            columns,
+            header_lines_count: headerRow + 1,
+            delimiter,
+            // Carried so the server can store the learned layout under the same
+            // fingerprint it computed from the full header row.
+            fingerprint,
+            mapping_source: assistApplied ? 'ai' : 'manual',
+        };
+    }, [mapping, headers, dateFormat, headerRow, delimiter, fingerprint, assistApplied]);
 
     // Live preview: the server parses the file with the current mapping using the
     // very same code the real ingest runs, so what you see is what will be loaded.
@@ -296,7 +336,17 @@ export default function SettlementUpload({
                 setDelimiter(json.delimiter);
                 setMapping(json.suggested_mapping);
                 setDateFormat(json.suggested_format || 'DD/MM/YYYY');
+                setFingerprint(json.fingerprint ?? '');
+                setMappingSource(json.mapping_source ?? 'aliases');
+                setAssist(null);
+                setAssistApplied(false);
                 setStep('mapping');
+
+                // Only bother the AI when we have no memory of this file shape —
+                // a learned or saved mapping is already better and free.
+                if ((json.mapping_source ?? 'aliases') === 'aliases') {
+                    void askAssistant(json.header_row, forceDelimiter);
+                }
             } else {
                 setError('No se pudieron leer las columnas del archivo.');
             }
@@ -305,6 +355,44 @@ export default function SettlementUpload({
         } finally {
             setBusy(false);
         }
+    };
+
+    const askAssistant = async (forHeaderRow?: number, forceDelimiter?: string) => {
+        if (!file || !acquirerId) return;
+        setAsking(true);
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('acquirer_id', acquirerId);
+            fd.append('header_row', String(forHeaderRow ?? headerRow));
+            if (forceDelimiter !== undefined) fd.append('delimiter', forceDelimiter);
+
+            const res = await fetch('/treasury/settlements/assist', {
+                method: 'POST',
+                headers: { Accept: 'application/json', 'X-CSRF-TOKEN': csrf() },
+                body: fd,
+            });
+            setAssist(await res.json());
+        } catch {
+            setAssist({
+                available: false,
+                message: 'No se pudo consultar la sugerencia con IA.',
+            });
+        } finally {
+            setAsking(false);
+        }
+    };
+
+    const applyAssist = () => {
+        if (!assist?.columns) return;
+        setMapping((prev) => {
+            const next = { ...prev };
+            for (const [field, spec] of Object.entries(assist.columns!)) {
+                next[field] = spec.index;
+            }
+            return next;
+        });
+        setAssistApplied(true);
     };
 
     const handleUpload = async () => {
@@ -573,6 +661,112 @@ export default function SettlementUpload({
                                     </Select>
                                 </FilterField>
                             </div>
+
+                            {mappingSource === 'learned' ? (
+                                <p className="inline-flex items-center gap-1.5 rounded bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    Formato reconocido — se aplicó un mapeo aprendido de una carga anterior
+                                </p>
+                            ) : null}
+
+                            {asking ? (
+                                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Consultando a la IA qué significa cada columna…
+                                </p>
+                            ) : null}
+
+                            {assist && !asking ? (
+                                assist.available && assist.columns ? (
+                                    <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <p className="flex items-center gap-2 text-sm font-medium">
+                                                <Sparkles className="h-4 w-4 text-primary" />
+                                                Sugerencia de IA
+                                            </p>
+                                            <div className="flex gap-2">
+                                                {assistApplied ? (
+                                                    <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                                                        <CheckCircle2 className="h-3.5 w-3.5" /> Aplicada
+                                                    </span>
+                                                ) : (
+                                                    <>
+                                                        <Button size="sm" onClick={applyAssist}>
+                                                            Aplicar
+                                                        </Button>
+                                                        <Button size="sm" variant="outline" onClick={() => setAssist(null)}>
+                                                            Ignorar
+                                                        </Button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-2 space-y-1">
+                                            {Object.entries(assist.columns).map(([field, spec]) => (
+                                                <p key={field} className="text-xs text-muted-foreground">
+                                                    <span className="font-medium text-foreground">
+                                                        {FIELDS.find((f) => f.key === field)?.label ?? field}
+                                                    </span>{' '}
+                                                    → «{headers[spec.index] || `Columna ${spec.index + 1}`}»{' '}
+                                                    <span className="tabular-nums opacity-70">({spec.confidence}%)</span>
+                                                    {spec.why ? ` — ${spec.why}` : ''}
+                                                </p>
+                                            ))}
+                                        </div>
+
+                                        {assist.glossary && assist.glossary.length > 0 ? (
+                                            <div className="mt-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowGlossary((s) => !s)}
+                                                    className="text-xs font-medium text-primary underline underline-offset-2"
+                                                >
+                                                    ¿Qué es cada columna? ({assist.glossary.length})
+                                                </button>
+                                                {showGlossary ? (
+                                                    <div className="mt-1 max-h-48 space-y-1 overflow-y-auto pr-1">
+                                                        {assist.glossary.map((g) => (
+                                                            <p key={g.index} className="text-xs text-muted-foreground">
+                                                                <span className="font-medium text-foreground">{g.header}</span> — {g.meaning}
+                                                            </p>
+                                                        ))}
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-muted-foreground">
+                                        {assist.message ?? 'La sugerencia con IA no está disponible.'}{' '}
+                                        <button
+                                            type="button"
+                                            onClick={() => void askAssistant()}
+                                            className="font-medium text-primary underline underline-offset-2"
+                                        >
+                                            Reintentar
+                                        </button>
+                                    </p>
+                                )
+                            ) : null}
+
+                            {!assist && !asking ? (
+                                <Button size="sm" variant="outline" onClick={() => void askAssistant()}>
+                                    <Sparkles className="h-4 w-4" />
+                                    Sugerir con IA
+                                </Button>
+                            ) : null}
+
+                            {preview?.success && preview.warnings?.length ? (
+                                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3">
+                                    {preview.warnings.map((w, i) => (
+                                        <p key={i} className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400">
+                                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                            {w.message}
+                                        </p>
+                                    ))}
+                                </div>
+                            ) : null}
 
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                 {FIELDS.map(({ key, label, required }) => {

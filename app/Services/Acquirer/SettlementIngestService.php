@@ -50,7 +50,7 @@ final class SettlementIngestService
      * hash already exists for this acquirer+branch (or repeat within the file)
      * are skipped. Derives the upload period from the rows. No matching.
      *
-     * @param  array<int, array<string, mixed>>  $rows  rows from SettlementLayoutAnalyzer::parseRows()
+     * @param  array<int, array<string, mixed>>  $rows  rows from SettlementParser::parseRows()
      */
     public function ingestRows(SettlementUpload $upload, array $rows): IngestResult
     {

@@ -6,10 +6,13 @@ use App\Enums\SettlementUploadStatus;
 use App\Http\Requests\SettlementHeadersRequest;
 use App\Http\Requests\SettlementIngestRequest;
 use App\Models\Acquirer;
+use App\Models\AcquirerLayout;
 use App\Models\ExternalSettlement;
 use App\Models\SettlementUpload;
+use App\Services\Acquirer\MappingGuards;
 use App\Services\Acquirer\SettlementIngestService;
 use App\Services\Acquirer\SettlementParser;
+use App\Services\Ai\SettlementMappingAssistant;
 use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -19,6 +22,8 @@ class SettlementIngestController extends Controller
     public function __construct(
         protected SettlementParser $parser,
         protected SettlementIngestService $ingest,
+        protected MappingGuards $guards,
+        protected SettlementMappingAssistant $assistant,
     ) {}
 
     /**
@@ -56,14 +61,23 @@ class SettlementIngestController extends Controller
             delimiter: $request->filled('delimiter') ? (string) $request->input('delimiter') : null,
         );
 
-        $savedMap = $request->filled('acquirer_id')
-            ? Acquirer::find($request->integer('acquirer_id'))?->column_map
-            : null;
-
         // Header row and delimiter are properties of THIS file (the same acquirer
         // ships xlsx and csv with different layouts), so detection wins. The saved
         // map still drives the column mapping, which is matched by header name.
         $headerRow = $read['rows'][$read['header_row']] ?? [];
+
+        $acquirerId = $request->filled('acquirer_id') ? $request->integer('acquirer_id') : null;
+        $fingerprint = AcquirerLayout::fingerprintFor($headerRow);
+
+        // A layout we have already learned for this exact file shape wins over
+        // aliases — and costs nothing.
+        $layout = $acquirerId !== null ? AcquirerLayout::findFor($acquirerId, $fingerprint) : null;
+        $savedMap = $layout?->column_map
+            ?? ($acquirerId !== null ? Acquirer::find($acquirerId)?->column_map : null);
+
+        if ($layout !== null) {
+            $layout->markUsed();
+        }
 
         return response()->json([
             'success' => true,
@@ -71,9 +85,50 @@ class SettlementIngestController extends Controller
             'header_row' => $read['header_row'],
             'delimiter' => $read['delimiter'],
             'headers' => $headerRow,
+            'fingerprint' => $fingerprint,
             'suggested_mapping' => $this->parser->suggestMapping($headerRow, $savedMap),
-            'suggested_format' => $savedMap['columns']['transaction_date']['format'] ?? 'DD/MM/YYYY',
+            'suggested_format' => $layout?->date_format
+                ?? $savedMap['columns']['transaction_date']['format']
+                ?? 'DD/MM/YYYY',
+            // Where the suggestion came from, so the UI can say so and we can
+            // measure how often we avoid re-deriving a mapping.
+            'mapping_source' => $layout !== null ? 'learned' : ($savedMap !== null ? 'acquirer' : 'aliases'),
+            'layout_label' => $layout?->label,
         ]);
+    }
+
+    /**
+     * Ask the AI what each column means. Purely advisory: on any failure this
+     * returns `available: false` with a 200 so the upload flow is never blocked.
+     */
+    public function assist(SettlementHeadersRequest $request): JsonResponse
+    {
+        $read = $this->parser->readHeaders(
+            $request->file('file'),
+            delimiter: $request->filled('delimiter') ? (string) $request->input('delimiter') : null,
+        );
+
+        $headerRow = $request->filled('header_row')
+            ? max(0, $request->integer('header_row'))
+            : $read['header_row'];
+
+        $headers = $read['rows'][$headerRow] ?? [];
+        $sampleRows = array_slice($read['rows'], $headerRow + 1, 3);
+
+        $acquirerName = $request->filled('acquirer_id')
+            ? Acquirer::find($request->integer('acquirer_id'))?->name
+            : null;
+
+        $suggestion = $this->assistant->suggest($headers, $sampleRows, $acquirerName);
+
+        if ($suggestion === null) {
+            return response()->json([
+                'available' => false,
+                'message' => 'La sugerencia con IA no está disponible en este momento. Puedes mapear las columnas manualmente.',
+            ]);
+        }
+
+        return response()->json(['available' => true, ...$suggestion]);
     }
 
     /**
@@ -98,16 +153,20 @@ class SettlementIngestController extends Controller
             return response()->json(['success' => false, 'error' => $e->getMessage()], 422);
         }
 
+        $sample = array_map(
+            static fn (array $row): array => collect($row)->except('raw')->all(),
+            array_slice($result['rows'], 0, 5),
+        );
+
         return response()->json([
             'success' => true,
             'total_rows' => $result['total_rows'],
             'parsed_rows' => count($result['rows']),
             'skipped_rows' => $result['skipped_rows'],
             'skipped' => $result['skipped'],
-            'sample' => array_map(
-                static fn (array $row): array => collect($row)->except('raw')->all(),
-                array_slice($result['rows'], 0, 5),
-            ),
+            'sample' => $sample,
+            // Deterministic sanity checks — these run even when the AI is down.
+            'warnings' => $this->guards->check($parseConfig['columns'] ?? [], $sample),
         ]);
     }
 
@@ -204,15 +263,40 @@ class SettlementIngestController extends Controller
             );
         }
 
-        Acquirer::whereKey($acquirerId)->update([
-            'column_map' => [
-                'columns' => $columns,
-                'delimiter' => $parseConfig['delimiter'] ?? null,
-                'header_row' => isset($parseConfig['header_lines_count'])
-                    ? max(0, (int) $parseConfig['header_lines_count'] - 1)
-                    : null,
+        $headerRow = isset($parseConfig['header_lines_count'])
+            ? max(0, (int) $parseConfig['header_lines_count'] - 1)
+            : 0;
+
+        $map = [
+            'columns' => $columns,
+            'delimiter' => $parseConfig['delimiter'] ?? null,
+            'header_row' => $headerRow,
+        ];
+
+        // Kept for backwards compatibility with the seeded per-acquirer maps.
+        Acquirer::whereKey($acquirerId)->update(['column_map' => $map]);
+
+        // The real memory: one learned layout per file shape. The fingerprint must
+        // come from the full header row that `headers()` hashed — deriving it here
+        // from the mapped columns alone would produce a different, never-matching key.
+        $fingerprint = (string) ($parseConfig['fingerprint'] ?? '');
+        if ($fingerprint === '') {
+            return;
+        }
+
+        AcquirerLayout::updateOrCreate(
+            [
+                'acquirer_id' => $acquirerId,
+                'fingerprint' => $fingerprint,
             ],
-        ]);
+            [
+                'column_map' => $map,
+                'date_format' => $parseConfig['columns']['transaction_date']['format'] ?? null,
+                'delimiter' => $parseConfig['delimiter'] ?? null,
+                'header_row' => $headerRow,
+                'source' => $parseConfig['mapping_source'] ?? AcquirerLayout::SOURCE_MANUAL,
+            ],
+        );
     }
 
     /**

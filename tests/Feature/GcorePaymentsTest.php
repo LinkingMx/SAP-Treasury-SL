@@ -68,12 +68,10 @@ it('forbids querying a branch the user does not belong to', function () {
     $branch = Branch::factory()->create(['payment_branch' => 'Ichikani Metropolitan']);
 
     // The user is NOT attached to this branch, so GcorePaymentsRequest::authorize()
-    // throws. The app's global handler (bootstrap/app.php) renders any non-validation
-    // exception as a 500 JSON body for AJAX requests, so the contract here is "blocked,
-    // no gCore call made" rather than a clean 403.
+    // denies it and the JSON handler now keeps the real 403.
     $this->actingAs($user)
         ->getJson(gcoreUrl($branch, ['from' => '2026-05-01', 'to' => '2026-05-31']))
-        ->assertStatus(500)
+        ->assertForbidden()
         ->assertJsonPath('success', false);
 
     Http::assertNothingSent();

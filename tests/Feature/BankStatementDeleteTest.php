@@ -42,7 +42,7 @@ test('deleting a non-existent bank statement returns error', function () {
 
     $this->actingAs($user)
         ->deleteJson(route('bank-statements.destroy', 999999))
-        ->assertStatus(500)
+        ->assertNotFound()
         ->assertJson(['success' => false]);
 });
 

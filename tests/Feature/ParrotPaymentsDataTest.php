@@ -113,10 +113,9 @@ it('blocks a branch the user does not own', function () {
     $branch = Branch::factory()->create(['payment_branch' => 'X']);
     $user = User::factory()->create(); // not attached
 
-    // Authorization denial surfaces as 500 via the app's JSON exception handler.
     $this->actingAs($user)
         ->getJson(dataUrl($branch->id))
-        ->assertStatus(500)
+        ->assertForbidden()
         ->assertJsonPath('success', false);
 
     Http::assertNothingSent();

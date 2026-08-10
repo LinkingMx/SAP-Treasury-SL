@@ -33,12 +33,31 @@ return Application::configure(basePath: dirname(__DIR__))
                 return null;
             }
 
-            if ($request->expectsJson() || $request->is('treasury/ai/*')) {
-                return response()->json([
-                    'success' => false,
-                    'message' => $e->getMessage(),
-                    'exception' => get_class($e),
-                ], 500);
+            if (! $request->expectsJson() && ! $request->is('treasury/ai/*')) {
+                return null;
             }
+
+            // Keep the real status code. Collapsing everything into 500 hid an
+            // expired session behind an opaque "server error" that Laravel never
+            // logs (TokenMismatchException is not reportable), leaving no trace
+            // of why an upload failed.
+            $status = match (true) {
+                $e instanceof \Illuminate\Session\TokenMismatchException => 419,
+                $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface => $e->getStatusCode(),
+                default => 500,
+            };
+
+            $message = match ($status) {
+                419 => 'Tu sesión expiró. Recarga la página (F5) e inténtalo de nuevo.',
+                413 => 'El archivo es demasiado grande para el servidor.',
+                403 => 'No tienes permiso para realizar esta acción.',
+                default => $e->getMessage(),
+            };
+
+            return response()->json([
+                'success' => false,
+                'message' => $message,
+                'exception' => get_class($e),
+            ], $status);
         });
     })->create();

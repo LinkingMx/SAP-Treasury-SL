@@ -102,6 +102,7 @@ interface UploadRow {
 
 interface HeadersResponse {
     success: boolean;
+    message?: string;
     rows: string[][];
     header_row: number;
     delimiter: string;
@@ -348,7 +349,9 @@ export default function SettlementUpload({
                     void askAssistant(json.header_row, forceDelimiter);
                 }
             } else {
-                setError('No se pudieron leer las columnas del archivo.');
+                // Surface what the server actually said — the old hardcoded text
+                // hid real causes like an expired session.
+                setError(json.message ?? 'No se pudieron leer las columnas del archivo.');
             }
         } catch {
             setError('Error de red al leer el archivo.');

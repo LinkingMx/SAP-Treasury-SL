@@ -190,7 +190,7 @@ it('blocks uploading to a branch the user does not own', function () {
             'parse_config' => mappingParseConfig(),
             'file' => settlementCsv(),
         ], ['Accept' => 'application/json'])
-        ->assertStatus(500)
+        ->assertForbidden()
         ->assertJsonPath('success', false);
 });
 

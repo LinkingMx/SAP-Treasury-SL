@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\BankAccount;
 use App\Models\Branch;
+use App\Services\Ai\AiErrorTranslator;
 use App\Services\BankStatementService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -39,7 +40,7 @@ class BankStatementController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage(),
+                'message' => AiErrorTranslator::translate($e),
             ], 422);
         }
     }
@@ -105,7 +106,7 @@ class BankStatementController extends Controller
                 Log::error('Bank statement preview failed', ['error' => $e->getMessage()]);
                 $sendEvent([
                     'event' => 'error',
-                    'message' => $e->getMessage(),
+                    'message' => AiErrorTranslator::translate($e),
                 ]);
             }
         }, 200, [

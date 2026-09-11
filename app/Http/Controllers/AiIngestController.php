@@ -8,6 +8,7 @@ use App\Models\Batch;
 use App\Models\Branch;
 use App\Models\LearningRule;
 use App\Models\Transaction;
+use App\Services\Ai\AiErrorTranslator;
 use App\Services\Ai\BankLayoutAnalyzer;
 use App\Services\Ai\TransactionClassifier;
 use Illuminate\Http\JsonResponse;
@@ -46,7 +47,7 @@ class AiIngestController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage(),
+                'message' => AiErrorTranslator::translate($e),
             ], 422);
         }
     }
@@ -132,7 +133,7 @@ class AiIngestController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage(),
+                'message' => AiErrorTranslator::translate($e),
             ], 422);
         }
     }

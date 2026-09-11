@@ -51,7 +51,11 @@ return Application::configure(basePath: dirname(__DIR__))
                 419 => 'Tu sesión expiró. Recarga la página (F5) e inténtalo de nuevo.',
                 413 => 'El archivo es demasiado grande para el servidor.',
                 403 => 'No tienes permiso para realizar esta acción.',
-                default => $e->getMessage(),
+                // Redact as a backstop: providers embed credentials in their own
+                // error text (Google prints the API key in "Consumer 'api_key:...'
+                // has been suspended"), and this handler is the last thing between
+                // an exception and the user's browser.
+                default => \App\Services\Ai\AiErrorTranslator::redact($e->getMessage()),
             };
 
             return response()->json([

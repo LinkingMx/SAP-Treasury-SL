@@ -84,7 +84,7 @@ PROMPT;
         /** @var \Gemini\Client $gemini */
         $gemini = app('gemini');
 
-        $result = $gemini->generativeModel('gemini-2.5-flash')
+        $result = $gemini->generativeModel(GeminiModel::flash())
             ->withGenerationConfig(new GenerationConfig(
                 responseMimeType: ResponseMimeType::APPLICATION_JSON,
             ))
@@ -382,7 +382,7 @@ PROMPT;
         /** @var \Gemini\Client $gemini */
         $gemini = app('gemini');
 
-        $result = $gemini->generativeModel('gemini-2.5-flash')
+        $result = $gemini->generativeModel(GeminiModel::flash())
             ->withGenerationConfig(new GenerationConfig(
                 responseMimeType: ResponseMimeType::APPLICATION_JSON,
                 maxOutputTokens: 65536,

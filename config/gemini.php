@@ -28,6 +28,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Default Model
+    |--------------------------------------------------------------------------
+    |
+    | Google retires models for new projects without retiring them for existing
+    | ones, so a valid API key can still answer 404 ("no longer available to new
+    | users"). Keeping the name here lets us move to the successor by changing
+    | the environment instead of shipping a release.
+    */
+
+    'model' => env('GEMINI_MODEL', 'gemini-3.8-flash'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Request Timeout
     |--------------------------------------------------------------------------
     |

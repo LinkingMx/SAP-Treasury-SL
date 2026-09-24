@@ -25,8 +25,6 @@ use Illuminate\Support\Facades\Log;
  */
 class SettlementMappingAssistant
 {
-    private const MODEL = 'gemini-2.5-flash';
-
     private const SAMPLE_ROWS = 3;
 
     /**
@@ -44,7 +42,7 @@ class SettlementMappingAssistant
 
         try {
             $result = app('gemini')
-                ->generativeModel(self::MODEL)
+                ->generativeModel(GeminiModel::flash())
                 ->withGenerationConfig(new GenerationConfig(
                     // Mapping a file is not a creative task; the same file must
                     // always produce the same answer.

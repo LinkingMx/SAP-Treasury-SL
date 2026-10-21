@@ -2,18 +2,18 @@
 
 namespace App\Services\Ai;
 
+use App\Services\Ai\Llm\LlmClient;
+use App\Services\Ai\Llm\LlmFormat;
+use App\Services\Ai\Llm\LlmOptions;
 use Carbon\Carbon;
-use Gemini\Data\Blob;
-use Gemini\Data\GenerationConfig;
-use Gemini\Enums\FinishReason;
-use Gemini\Enums\MimeType;
-use Gemini\Enums\ResponseMimeType;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class BankLayoutAnalyzer
 {
+    public function __construct(private readonly LlmClient $llm) {}
+
     /**
      * Step 1: Analyze layout — AI detects bank name, header structure, and column format.
      *
@@ -81,22 +81,13 @@ IMPORTANTE:
 Responde SOLO el JSON, sin explicaciones.
 PROMPT;
 
-        /** @var \Gemini\Client $gemini */
-        $gemini = app('gemini');
+        $response = $this->llm->generate($prompt, new LlmOptions(
+            format: LlmFormat::JsonObject,
+            attachment: $sample,
+        ));
 
-        $result = $gemini->generativeModel(GeminiModel::flash())
-            ->withGenerationConfig(new GenerationConfig(
-                responseMimeType: ResponseMimeType::APPLICATION_JSON,
-            ))
-            ->generateContent([
-                $prompt,
-                new Blob(
-                    mimeType: MimeType::TEXT_CSV,
-                    data: base64_encode($sample),
-                ),
-            ]);
-
-        $parsed = json_decode(trim($result->text()), true) ?? [];
+        $parsed = $response->json();
+        $parsed = is_array($parsed) ? $parsed : [];
 
         Log::info('AI layout analysis complete', [
             'bank_name_guess' => $parsed['bank_name_guess'] ?? 'Desconocido',
@@ -351,7 +342,7 @@ PROMPT;
     }
 
     /**
-     * Send a content chunk to Gemini with column context and extract transactions.
+     * Send a content chunk to the AI with column context and extract transactions.
      *
      * @return array<int, mixed>
      */
@@ -379,35 +370,24 @@ Estructura JSON compacta:
 [{"sequence":1,"due_date":"2026-02-17","memo":"Descripcion","debit_amount":100.50,"credit_amount":null}]
 PROMPT;
 
-        /** @var \Gemini\Client $gemini */
-        $gemini = app('gemini');
+        $response = $this->llm->generate($prompt, new LlmOptions(
+            format: LlmFormat::JsonArray,
+            attachment: $content,
+            maxTokens: 65536,
+        ));
 
-        $result = $gemini->generativeModel(GeminiModel::flash())
-            ->withGenerationConfig(new GenerationConfig(
-                responseMimeType: ResponseMimeType::APPLICATION_JSON,
-                maxOutputTokens: 65536,
-            ))
-            ->generateContent([
-                $prompt,
-                new Blob(
-                    mimeType: MimeType::TEXT_CSV,
-                    data: base64_encode($content),
-                ),
-            ]);
-
-        $finishReason = $result->candidates[0]->finishReason ?? null;
-        $responseText = trim($result->text());
+        $responseText = trim($response->text);
 
         Log::info('AI chunk response', [
-            'finish_reason' => $finishReason?->value,
+            'truncated' => $response->truncated,
             'response_length' => strlen($responseText),
         ]);
 
-        $decoded = json_decode($responseText, true);
+        $decoded = $response->json();
 
         // If truncated, repair by closing the JSON array
-        if ($decoded === null && $finishReason === FinishReason::MAX_TOKENS) {
-            Log::warning('AI chunk truncated (MAX_TOKENS), repairing');
+        if ($decoded === null && $response->truncated) {
+            Log::warning('AI chunk truncated (output limit), repairing');
             $lastBrace = strrpos($responseText, '}');
             if ($lastBrace !== false) {
                 $decoded = json_decode(substr($responseText, 0, $lastBrace + 1).']', true);

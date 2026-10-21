@@ -14,7 +14,7 @@ use Throwable;
  */
 final class AiErrorTranslator
 {
-    private const UNAVAILABLE = 'El análisis con IA no está disponible en este momento (problema de acceso o facturación en la cuenta de Google). Contacta al administrador.';
+    private const UNAVAILABLE = 'El análisis con IA no está disponible en este momento (problema de acceso o facturación con el proveedor de IA). Contacta al administrador.';
 
     /**
      * A safe, Spanish message for the end user.
@@ -28,16 +28,26 @@ final class AiErrorTranslator
             str_contains($raw, 'denied access'),
             str_contains($raw, 'permission denied'),
             str_contains($raw, 'permission_denied'),
-            str_contains($raw, 'dunning') => self::UNAVAILABLE,
+            str_contains($raw, 'dunning'),
+            // Prepaid balance ran out: Gemini's 402 "credits are depleted",
+            // DeepSeek's 402 "Insufficient Balance".
+            str_contains($raw, 'depleted'),
+            str_contains($raw, 'prepayment'),
+            str_contains($raw, 'insufficient balance'),
+            str_contains($raw, 'billing') => self::UNAVAILABLE,
 
             str_contains($raw, 'api key not valid'),
             str_contains($raw, 'api_key_invalid'),
-            str_contains($raw, 'invalid api key') => 'La clave de acceso al servicio de IA no es válida. Contacta al administrador.',
+            str_contains($raw, 'invalid api key'),
+            str_contains($raw, 'authentication fails') => 'La clave de acceso al servicio de IA no es válida. Contacta al administrador.',
 
             str_contains($raw, 'quota'),
             str_contains($raw, 'resource_exhausted'),
             str_contains($raw, 'rate limit'),
             str_contains($raw, 'too many requests') => 'Se agotó la cuota del servicio de IA. Intenta de nuevo más tarde.',
+
+            str_contains($raw, 'server busy'),
+            str_contains($raw, 'overloaded') => 'El servicio de IA está saturado en este momento. Intenta de nuevo en unos minutos.',
 
             str_contains($raw, 'timed out'),
             str_contains($raw, 'timeout'),

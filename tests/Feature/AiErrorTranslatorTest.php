@@ -25,7 +25,18 @@ it('explains a suspended project in Spanish', function (string $raw) {
     'consumer suspended' => "Permission denied: Consumer 'api_key:AIzaSyFAKE1234567890abcdefg' has been suspended.",
     'denied access' => 'Your project has been denied access. Please contact support.',
     'dunning' => 'Lightning dunning decision is deny for project: projects/345729039354',
+    'gemini credits depleted' => 'Your prepayment credits are depleted. Please go to AI Studio to manage your project and billing.',
+    'deepseek balance' => 'DeepSeek HTTP 402: Insufficient Balance',
 ]);
+
+/**
+ * The provider is no longer always Google, so the message must not name it.
+ */
+it('does not blame a specific provider for an unavailable service', function () {
+    expect(AiErrorTranslator::translate(new RuntimeException('DeepSeek HTTP 402: Insufficient Balance')))
+        ->not->toContain('Google')
+        ->toContain('proveedor de IA');
+});
 
 it('distinguishes quota, invalid key and connectivity', function (string $raw, string $expected) {
     expect(AiErrorTranslator::translate(new RuntimeException($raw)))->toContain($expected);
@@ -33,6 +44,9 @@ it('distinguishes quota, invalid key and connectivity', function (string $raw, s
     ['Quota exceeded (RESOURCE_EXHAUSTED)', 'cuota'],
     ['API key not valid. Please pass a valid API key.', 'no es válida'],
     ['cURL error 28: Operation timed out', 'conectar'],
+    ['DeepSeek HTTP 401: Authentication Fails, Your api key: ****abcd is invalid', 'no es válida'],
+    ['DeepSeek HTTP 429: Rate limit reached for requests', 'cuota'],
+    ['DeepSeek HTTP 503: Server overloaded, please try again later', 'saturado'],
 ]);
 
 it('passes through an unrelated message once redacted', function () {

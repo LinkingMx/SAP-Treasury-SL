@@ -3,15 +3,13 @@
 namespace App\Services\Ai;
 
 use App\Services\Acquirer\SettlementParser;
-use Gemini\Data\GenerationConfig;
-use Gemini\Data\Schema;
-use Gemini\Data\ThinkingConfig;
-use Gemini\Enums\DataType;
-use Gemini\Enums\ResponseMimeType;
+use App\Services\Ai\Llm\LlmClient;
+use App\Services\Ai\Llm\LlmFormat;
+use App\Services\Ai\Llm\LlmOptions;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Asks Gemini what each column of an acquirer file MEANS.
+ * Asks the AI what each column of an acquirer file MEANS.
  *
  * The deterministic parser already owns delimiter, header row, dates and signs.
  * What it cannot do is semantics: alias matching picks "Tiempo total de entrega"
@@ -27,6 +25,8 @@ class SettlementMappingAssistant
 {
     private const SAMPLE_ROWS = 3;
 
+    public function __construct(private readonly LlmClient $llm) {}
+
     /**
      * Suggest a semantic mapping for a file's columns.
      *
@@ -41,22 +41,18 @@ class SettlementMappingAssistant
         }
 
         try {
-            $result = app('gemini')
-                ->generativeModel(GeminiModel::flash())
-                ->withGenerationConfig(new GenerationConfig(
+            $response = $this->llm->generate(
+                $this->prompt($headers, $sampleRows, $acquirerName),
+                new LlmOptions(
+                    format: LlmFormat::JsonObject,
+                    schema: $this->responseSchema(),
                     // Mapping a file is not a creative task; the same file must
                     // always produce the same answer.
                     temperature: 0.0,
-                    responseMimeType: ResponseMimeType::APPLICATION_JSON,
-                    responseSchema: $this->responseSchema(),
-                    // Reading ~40 column names is not a reasoning problem, and the
-                    // default thinking budget cost ~25s per call — far too slow for
-                    // a screen the user is waiting on.
-                    thinkingConfig: new ThinkingConfig(includeThoughts: false, thinkingBudget: 0),
-                ))
-                ->generateContent($this->prompt($headers, $sampleRows, $acquirerName));
+                ),
+            );
 
-            $decoded = json_decode(trim($result->text()), true);
+            $decoded = $response->json();
 
             if (! is_array($decoded)) {
                 Log::warning('Settlement mapping assistant returned unusable JSON');
@@ -136,38 +132,46 @@ class SettlementMappingAssistant
         PROMPT;
     }
 
-    private function responseSchema(): Schema
+    /**
+     * Gemini enforces this schema; DeepSeek only reads it in the prompt, which
+     * is why normalize() still validates every field and index that comes back.
+     *
+     * @return array<string, mixed>
+     */
+    private function responseSchema(): array
     {
-        $column = new Schema(
-            type: DataType::OBJECT,
-            properties: [
-                'field' => new Schema(type: DataType::STRING, enum: SettlementParser::FIELDS),
-                'index' => new Schema(type: DataType::INTEGER),
-                'confidence' => new Schema(type: DataType::INTEGER),
-                'why' => new Schema(type: DataType::STRING),
+        return [
+            'type' => 'object',
+            'properties' => [
+                'columns' => [
+                    'type' => 'array',
+                    'items' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'field' => ['type' => 'string', 'enum' => SettlementParser::FIELDS],
+                            'index' => ['type' => 'integer'],
+                            'confidence' => ['type' => 'integer'],
+                            'why' => ['type' => 'string'],
+                        ],
+                        'required' => ['field', 'index', 'confidence', 'why'],
+                    ],
+                ],
+                'warnings' => ['type' => 'array', 'items' => ['type' => 'string']],
+                'glossary' => [
+                    'type' => 'array',
+                    'items' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'index' => ['type' => 'integer'],
+                            'header' => ['type' => 'string'],
+                            'meaning' => ['type' => 'string'],
+                        ],
+                        'required' => ['index', 'header', 'meaning'],
+                    ],
+                ],
             ],
-            required: ['field', 'index', 'confidence', 'why'],
-        );
-
-        $glossary = new Schema(
-            type: DataType::OBJECT,
-            properties: [
-                'index' => new Schema(type: DataType::INTEGER),
-                'header' => new Schema(type: DataType::STRING),
-                'meaning' => new Schema(type: DataType::STRING),
-            ],
-            required: ['index', 'header', 'meaning'],
-        );
-
-        return new Schema(
-            type: DataType::OBJECT,
-            properties: [
-                'columns' => new Schema(type: DataType::ARRAY, items: $column),
-                'warnings' => new Schema(type: DataType::ARRAY, items: new Schema(type: DataType::STRING)),
-                'glossary' => new Schema(type: DataType::ARRAY, items: $glossary),
-            ],
-            required: ['columns'],
-        );
+            'required' => ['columns'],
+        ];
     }
 
     /**

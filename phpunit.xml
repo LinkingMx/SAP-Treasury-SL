@@ -31,5 +31,7 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="AI_DRIVER" value="gemini"/>
+        <env name="DEEPSEEK_API_KEY" value="sk-test-not-a-real-key-000000"/>
     </php>
 </phpunit>

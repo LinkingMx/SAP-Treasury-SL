@@ -37,7 +37,7 @@ it('asks the configured model, not a hardcoded one', function () {
         ]),
     ]);
 
-    (new SettlementMappingAssistant)->suggest(['Fecha', 'Monto'], [['01/01/2026', '10']]);
+    app(SettlementMappingAssistant::class)->suggest(['Fecha', 'Monto'], [['01/01/2026', '10']]);
 
     Gemini::assertSent(GenerativeModel::class, 'gemini-4-flash');
 });

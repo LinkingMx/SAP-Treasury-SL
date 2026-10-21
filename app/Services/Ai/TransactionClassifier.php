@@ -5,7 +5,9 @@ namespace App\Services\Ai;
 use App\Models\Branch;
 use App\Models\LearningRule;
 use App\Models\SapAccount;
-use Gemini\Client as GeminiClient;
+use App\Services\Ai\Llm\LlmClient;
+use App\Services\Ai\Llm\LlmFormat;
+use App\Services\Ai\Llm\LlmOptions;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -13,6 +15,8 @@ use Illuminate\Support\Facades\Log;
 class TransactionClassifier
 {
     protected const CHUNK_SIZE = 50; // Reduced to avoid API timeout
+
+    public function __construct(protected LlmClient $llm) {}
 
     /**
      * Fallback accounts for unclassified transactions.
@@ -427,10 +431,8 @@ PROMPT;
         file_put_contents(storage_path('logs/ai_prompt.txt'), $prompt);
 
         try {
-            /** @var GeminiClient $gemini */
-            $gemini = app('gemini');
-            $result = $gemini->generativeModel(GeminiModel::flash())->generateContent($prompt);
-            $responseText = $result->text();
+            $response = $this->llm->generate($prompt, new LlmOptions(format: LlmFormat::JsonArray));
+            $responseText = $response->text;
 
             // Save AI response to file for debugging
             file_put_contents(storage_path('logs/ai_response.txt'), $responseText);
@@ -440,22 +442,9 @@ PROMPT;
                 'response' => $responseText,
             ]);
 
-            // Extract JSON from response
-            $responseText = trim($responseText);
-            if (str_starts_with($responseText, '```json')) {
-                $responseText = substr($responseText, 7);
-            }
-            if (str_starts_with($responseText, '```')) {
-                $responseText = substr($responseText, 3);
-            }
-            if (str_ends_with($responseText, '```')) {
-                $responseText = substr($responseText, 0, -3);
-            }
-            $responseText = trim($responseText);
+            $aiResults = $response->json();
 
-            $aiResults = json_decode($responseText, true);
-
-            if (json_last_error() !== JSON_ERROR_NONE) {
+            if (! is_array($aiResults)) {
                 Log::error('Failed to parse AI classification response', [
                     'response' => $responseText,
                     'error' => json_last_error_msg(),
@@ -654,29 +643,15 @@ RESPONDE SOLO JSON (sin explicaciones):
 PROMPT;
 
         try {
-            /** @var GeminiClient $gemini */
-            $gemini = app('gemini');
-            $result = $gemini->generativeModel(GeminiModel::flash())->generateContent($prompt);
-            $responseText = trim($result->text());
+            $response = $this->llm->generate($prompt, new LlmOptions(format: LlmFormat::JsonObject));
+            $responseText = trim($response->text);
 
             // Save for debugging
             file_put_contents(storage_path('logs/ai_pattern_extraction.txt'), "MEMO:\n{$memo}\n\nRESPONSE:\n{$responseText}\n\n", FILE_APPEND);
 
-            // Clean JSON response
-            if (str_starts_with($responseText, '```json')) {
-                $responseText = substr($responseText, 7);
-            }
-            if (str_starts_with($responseText, '```')) {
-                $responseText = substr($responseText, 3);
-            }
-            if (str_ends_with($responseText, '```')) {
-                $responseText = substr($responseText, 0, -3);
-            }
-            $responseText = trim($responseText);
+            $extracted = $response->json();
 
-            $extracted = json_decode($responseText, true);
-
-            if (json_last_error() === JSON_ERROR_NONE && isset($extracted['keywords'])) {
+            if (is_array($extracted) && isset($extracted['keywords'])) {
                 Log::info('Pattern extracted with AI', [
                     'memo' => substr($memo, 0, 100),
                     'keywords' => $extracted['keywords'],
